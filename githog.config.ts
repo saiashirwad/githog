@@ -27,14 +27,15 @@ export default defineConfig({
     comment: true,
   },
 
-  // How each agent is launched. Today this sends one prompt to an interactive
-  // claude. Once issue #2 (the Ralph loop runner) lands, this block evolves into
-  // the loop config (iteration cap, sentinels, /githog-plan + /githog-implement
-  // skills) — see docs/adr/0001-githog-driven-ralph-loop.md.
+  // How each agent is launched (ADR-0001 Ralph loop). The loop spawns headless
+  // `claude -p` per iteration; --dangerously-skip-permissions lets it run gh/git
+  // and edit files unattended (no interactive prompt exists to approve tools in
+  // headless mode). Blast radius is the worktree + host bash; the PR review is the
+  // gate, a sandbox is the future mitigation. Loop knobs (maxIterations, sentinels,
+  // /githog-plan + /githog-implement skills) take their defaults.
   agent: {
-    command: ["claude"],
+    command: ["claude", "--dangerously-skip-permissions"],
     surface: "worktree", // nest each agent under githog's workspace in herdr
-    prompt: (item) => `/implement ${item.url}`,
   },
 
   // `githog listen` — poll for open issues labelled agent:ready and auto-work
@@ -42,7 +43,7 @@ export default defineConfig({
   // + vendors Effect, so 2 in flight is plenty for this repo.
   listen: {
     label: "agent:ready",
-    intervalSeconds: 30,
-    maxConcurrent: 2,
+    intervalSeconds: 10,
+    maxConcurrent: 5,
   },
 });

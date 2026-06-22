@@ -94,7 +94,9 @@ export const captureStreaming = Effect.fn("githog/capture-streaming")(function* 
   return yield* Effect.scoped(
     Effect.gen(function* () {
       const handle = yield* spawner.spawn(
-        ChildProcess.make(command, args, { ...makeOptions(options), stdout: "pipe", stderr: "pipe" }),
+        // stdin: "ignore" (= /dev/null) — headless `claude -p` takes its prompt
+        // from argv; without this it blocks ~3s each invocation waiting on stdin.
+        ChildProcess.make(command, args, { ...makeOptions(options), stdin: "ignore", stdout: "pipe", stderr: "pipe" }),
       );
       const lines: Array<string> = [];
       const drain = Stream.runForEach(Stream.splitLines(Stream.decodeText(handle.all)), (line) =>
