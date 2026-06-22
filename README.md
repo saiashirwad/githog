@@ -142,15 +142,15 @@ Worktrees are provisioned **sequentially** (the port scanner reads sibling `.env
 
 ### The Ralph loop
 
-githog doesn't take one shot at an issue — it drives the agent to done (per [ADR-0001](./docs/adr/0001-githog-driven-ralph-loop.md)). After a worktree is provisioned, githog runs `githog loop <issue>` **inside the herdr pane** so you can watch it scroll by live:
+githog re-invokes the agent with a clean context each iteration until the issue is done (see [ADR-0001](./docs/adr/0001-githog-driven-ralph-loop.md)). After a worktree is provisioned, githog runs `githog loop <issue>` inside the herdr pane so you can watch it live:
 
-1. **Plan pass** — a one-shot `claude -p` invocation (`/githog-plan`) decomposes the issue into an atomic, vertical-slice task list committed to `TASKS.md` (the loop's first commit and its cross-iteration memory).
-2. **Iterations** — each iteration is a fresh `claude -p` invocation (`/githog-implement`) with a **clean context**: it picks the next incomplete task from `TASKS.md`, implements it, runs its own checks, commits, and marks the task done.
-3. **Stop** — githog parses each invocation's output for sentinels. `<promise>COMPLETE</promise>` ends the loop happily; the iteration cap or a `<blocked>reason</blocked>` ends it as blocked.
-   - **Complete** → `gh pr create` from the branch, link the issue, swap `agent:wip → agent:review`. The worktree is left alive for inspection.
+1. **Plan pass** — one `claude -p` invocation (`/githog-plan`) decomposes the issue into an atomic task list committed to `TASKS.md`, which serves as the loop's cross-iteration memory.
+2. **Iterations** — each iteration is a fresh `claude -p` invocation (`/githog-implement`) with a clean context: it picks the next incomplete task from `TASKS.md`, implements it, runs its own checks, commits, and marks the task done.
+3. **Stop** — githog parses each invocation's output for sentinels. `<promise>COMPLETE</promise>` ends the loop as complete; the iteration cap or a `<blocked>reason</blocked>` ends it as blocked.
+   - **Complete** → `gh pr create` from the branch, link the issue, swap `agent:wip → agent:review`. The worktree is left in place for inspection.
    - **Blocked** → push the partial branch, swap `agent:wip → agent:blocked`, post the reason as a comment. No PR.
 
-The prompt logic ships as editable Claude skills (`githog-plan`, `githog-implement`) seeded into each worktree at provision time, so you can read, tune, or run them by hand; a built-in default applies if a skill is absent. Override the cap, sentinels, skill names, or supply custom prompts via `agent.loop`.
+The prompt logic ships as editable Claude skills (`githog-plan`, `githog-implement`) seeded into each worktree at provision time; a built-in default applies if a skill is absent. Override the cap, sentinels, skill names, or supply custom prompts via `agent.loop`.
 
 ### `githog listen`
 
