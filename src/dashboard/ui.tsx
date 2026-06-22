@@ -65,7 +65,7 @@ export function Dashboard({ store, onQuit }: { store: Store; onQuit: () => void 
 
   return (
     <box flexDirection="column" height="100%">
-      <box border borderStyle="rounded" title="githog listen" padding={1}>
+      <box border borderStyle="rounded" title="homestead listen" padding={1}>
         <text fg={state.activeCount >= state.maxConcurrent ? "#e5c07b" : "#abb2bf"}>{headerLine}</text>
         {state.error ? <text fg="#e06c75">{`error: ${truncate(state.error, 110)}`}</text> : null}
       </box>

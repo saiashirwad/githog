@@ -27,7 +27,7 @@ const flagValue = (name: string): string | undefined => {
   return value === undefined || value === "" ? undefined : value;
 };
 // Work items can be bare numbers or full GitHub issue URLs, in any argv position
-// (so `githog 2 3`, `githog implement-issues 2`, and `githog <url>` all parse).
+// (so `homestead 2 3`, `homestead implement-issues 2`, and `homestead <url>` all parse).
 const issueRefs = (): ReadonlyArray<IssueRef> =>
   process.argv
     .slice(2)
@@ -47,9 +47,9 @@ const killBranches = (): ReadonlyArray<string> =>
 
 const fail = (message: string) => Effect.die(new Error(message));
 
-// --- `githog setup` — provision/isolate one worktree -----------------------
+// --- `homestead setup` — provision/isolate one worktree -----------------------
 
-const setupCommand = Effect.fn("githog/cli/setup")(function* () {
+const setupCommand = Effect.fn("homestead/cli/setup")(function* () {
   const config = yield* loadConfig(process.cwd());
   const options: WorktreeOptions = {
     create: flagValue("create"),
@@ -61,18 +61,18 @@ const setupCommand = Effect.fn("githog/cli/setup")(function* () {
   yield* setupWorktree(config, options);
 });
 
-// --- `githog implement-issues <n>...` — fan issues out into agents ----------
+// --- `homestead implement-issues <n>...` — fan issues out into agents ----------
 
-const implementIssuesCommand = Effect.fn("githog/cli/implement-issues")(
+const implementIssuesCommand = Effect.fn("homestead/cli/implement-issues")(
   function* (refs: ReadonlyArray<IssueRef>) {
     if (process.env.HERDR_ENV !== "1") {
       return yield* fail(
-        "[githog] not inside a herdr pane (HERDR_ENV != 1) — run this from a herdr terminal.",
+        "[homestead] not inside a herdr pane (HERDR_ENV != 1) — run this from a herdr terminal.",
       );
     }
     const config = yield* loadConfig(process.cwd());
     if (config.agent === undefined) {
-      return yield* fail("[githog] config has no `agent` block — implement-issues needs one to launch claude.");
+      return yield* fail("[homestead] config has no `agent` block — implement-issues needs one to launch claude.");
     }
     const agent = config.agent;
     const issues = config.issues ?? {};
@@ -88,8 +88,8 @@ const implementIssuesCommand = Effect.fn("githog/cli/implement-issues")(
         const target = `${ref.owner}/${ref.repo}`.toLowerCase();
         if (target !== here) {
           return yield* fail(
-            `[githog] issue URL points at ${ref.owner}/${ref.repo}, but you're in ${here}. ` +
-              `Run githog from inside ${ref.owner}/${ref.repo}, or pass the bare issue number.`,
+            `[homestead] issue URL points at ${ref.owner}/${ref.repo}, but you're in ${here}. ` +
+              `Run homestead from inside ${ref.owner}/${ref.repo}, or pass the bare issue number.`,
           );
         }
       }
@@ -125,39 +125,39 @@ const implementIssuesCommand = Effect.fn("githog/cli/implement-issues")(
   },
 );
 
-// --- `githog listen` — poll the repo and auto-implement `agent:ready` issues --
+// --- `homestead listen` — poll the repo and auto-implement `agent:ready` issues --
 
-const listenCommand = Effect.fn("githog/cli/listen")(function* () {
+const listenCommand = Effect.fn("homestead/cli/listen")(function* () {
   if (process.env.HERDR_ENV !== "1") {
-    return yield* fail("[githog] not inside a herdr pane (HERDR_ENV != 1) — run listen from a herdr terminal.");
+    return yield* fail("[homestead] not inside a herdr pane (HERDR_ENV != 1) — run listen from a herdr terminal.");
   }
   const config = yield* loadConfig(process.cwd());
   yield* listen(config, consoleReporter);
 });
 
-// --- `githog loop <issue>` — drive the agent loop for ONE issue (ADR-0001) ----
+// --- `homestead loop <issue>` — drive the agent loop for ONE issue (ADR-0001) ----
 // The loop runner: launchAgent runs this inside a herdr pane so iterations are
 // watchable. cwd is the issue's worktree, so config + branch resolve from here.
 
-const loopCommand = Effect.fn("githog/cli/loop")(function* () {
+const loopCommand = Effect.fn("homestead/cli/loop")(function* () {
   const ref = issueRefs()[0];
-  if (ref === undefined) return yield* fail("usage: githog loop <issue>");
+  if (ref === undefined) return yield* fail("usage: homestead loop <issue>");
   const cwd = process.cwd();
   const config = yield* loadConfig(cwd);
   if (config.agent === undefined) {
-    return yield* fail("[githog] config has no `agent` block — loop needs one to drive claude.");
+    return yield* fail("[homestead] config has no `agent` block — loop needs one to drive claude.");
   }
   const item = yield* resolveIssue(ref);
   const branch = yield* capture("git", ["rev-parse", "--abbrev-ref", "HEAD"], cwd);
   yield* runLoop(item, cwd, branch, config.agent, config.issues ?? {});
 });
 
-// --- `githog kill <branch>...` — tear a worktree + branch + herdr surface down -
+// --- `homestead kill <branch>...` — tear a worktree + branch + herdr surface down -
 
-const killCommand = Effect.fn("githog/cli/kill")(function* () {
+const killCommand = Effect.fn("homestead/cli/kill")(function* () {
   const branches = killBranches();
   if (branches.length === 0) {
-    return yield* fail("usage: githog kill <branch-or-issue>...");
+    return yield* fail("usage: homestead kill <branch-or-issue>...");
   }
   const repo = yield* resolveRepo();
   yield* Effect.forEach(branches, (branch) => killBranch(repo.primaryRoot, repo.repoName, branch), {
@@ -166,25 +166,25 @@ const killCommand = Effect.fn("githog/cli/kill")(function* () {
   yield* Console.log(`\n✅ killed ${branches.length}: ${branches.join(", ")}`);
 });
 
-// --- `githog init` — one-time local setup (config + skills + .gitignore) -------
+// --- `homestead init` — one-time local setup (config + skills + .gitignore) -------
 
-const initCommand = Effect.fn("githog/cli/init")(function* () {
+const initCommand = Effect.fn("homestead/cli/init")(function* () {
   const repo = yield* resolveRepo();
   yield* initRepo(repo.primaryRoot);
 });
 
 // --- dispatch ---------------------------------------------------------------
 
-const USAGE = `githog — config-driven worktree + agent provisioning
+const USAGE = `homestead — config-driven worktree + agent provisioning
 
 usage:
-  githog init                            (one-time: scaffold config + loop skills + .gitignore)
-  githog setup [--create <branch>] [--from <ref>] [--dir <path>] [--no-setup] [--dry-run]
-  githog implement-issues <issue>...     (issue = number or GitHub issue URL)
-  githog <issue>...                      (bare form, implies implement-issues)
-  githog listen                          (poll for 'agent:ready' issues, auto-implement)
-  githog loop <issue>                    (drive the agent loop for one issue — run by githog inside a pane)
-  githog kill <branch-or-issue>...       (remove worktree + branch + herdr surface)
+  homestead init                            (one-time: scaffold config + loop skills + .gitignore)
+  homestead setup [--create <branch>] [--from <ref>] [--dir <path>] [--no-setup] [--dry-run]
+  homestead implement-issues <issue>...     (issue = number or GitHub issue URL)
+  homestead <issue>...                      (bare form, implies implement-issues)
+  homestead listen                          (poll for 'agent:ready' issues, auto-implement)
+  homestead loop <issue>                    (drive the agent loop for one issue — run by homestead inside a pane)
+  homestead kill <branch-or-issue>...       (remove worktree + branch + herdr surface)
                                          (issue commands run inside a herdr pane)`;
 
 // `listen` renders the live TUI dashboard on an interactive terminal (OpenTUI
@@ -212,10 +212,10 @@ if (process.argv[2] === "listen" && process.stdout.isTTY && !hasFlag("plain")) {
   program.pipe(
     Effect.catchTags({
       ConfigNotFound: (error) =>
-        fail(`[githog] ${error.detail}\n  Add a githog.config.ts at your repo root: export default defineConfig({ ... })`),
-      ConfigInvalid: (error) => fail(`[githog] invalid config at ${error.path}: ${error.reason}`),
+        fail(`[homestead] ${error.detail}\n  Add a homestead.config.ts at your repo root: export default defineConfig({ ... })`),
+      ConfigInvalid: (error) => fail(`[homestead] invalid config at ${error.path}: ${error.reason}`),
       ServiceUnavailable: (error) =>
-        fail(`[githog] service '${error.name}' (${error.host}:${error.port}) ${error.detail}`),
+        fail(`[homestead] service '${error.name}' (${error.host}:${error.port}) ${error.detail}`),
     }),
     Effect.provide(BunServices.layer),
     BunRuntime.runMain,

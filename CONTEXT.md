@@ -1,22 +1,22 @@
 # Context
 
-The ubiquitous language for githog. Glossary only — no implementation details.
+The ubiquitous language for homestead. Glossary only — no implementation details.
 
 ## Terms
 
 ### Worktree
-An isolated git worktree provisioned by githog for one unit of work: its own branch,
+An isolated git worktree provisioned by homestead for one unit of work: its own branch,
 allocated ports, `.env`, services, and setup steps. The unit of isolation.
 
 ### Agent
-The coding agent (e.g. `claude`) that githog launches to work on an issue inside a
+The coding agent (e.g. `claude`) that homestead launches to work on an issue inside a
 worktree's herdr pane.
 
 ### Skills
-The prompt logic for each stage of work, shipped as versioned Claude skills that githog
-seeds into a worktree at provision time and invokes by name: `/githog-plan` (the plan
-pass), `/githog-implement` (one iteration), and later `/githog-review` (the fresh-context
-reviewer). Built-in defaults apply if a skill is absent; `githog.config.ts` can override
+The prompt logic for each stage of work, shipped as versioned Claude skills that homestead
+seeds into a worktree at provision time and invokes by name: `/homestead-plan` (the plan
+pass), `/homestead-implement` (one iteration), and later `/homestead-review` (the fresh-context
+reviewer). Built-in defaults apply if a skill is absent; `homestead.config.ts` can override
 the skill name or supply a custom prompt. Keeping the logic in skills (not buried in
 config or hardcoded) is what makes the factory tunable and introspectable — a skill can
 be read, edited, or run by hand in a pane to debug. The same mechanism later hosts the
@@ -47,14 +47,14 @@ The agent loop ends when every task is marked done.
 
 ### Completion sentinel
 A token the agent emits (e.g. `<promise>COMPLETE</promise>`) to signal the issue is
-finished. githog watches the agent's output for it and stops the agent loop. The agent
+finished. homestead watches the agent's output for it and stops the agent loop. The agent
 is responsible for running its own tests/checks before emitting it. An iteration cap is
 the backstop if the sentinel is never emitted.
 
 ### Completion handoff
-What githog does when the agent loop ends on the completion sentinel: open a pull request
+What homestead does when the agent loop ends on the completion sentinel: open a pull request
 from the worktree's branch (`gh pr create`), link the issue, and move it to the
-`agent:review` state. The worktree is left alive for inspection until `githog kill`.
+`agent:review` state. The worktree is left alive for inspection until `homestead kill`.
 The PR queue is the human review/merge surface. (A future fresh-context reviewer pass —
 a clean agent invocation that posts review notes or files follow-up issues — layers on
 top of this.)
@@ -69,7 +69,7 @@ concurrency gauge for the `listen` daemon.
 ### Blocked
 A loop that stopped without completing. Two causes: the iteration cap was exhausted
 without a completion sentinel, or the agent emitted a `<blocked>reason</blocked>`
-sentinel mid-loop because it hit a decision it couldn't make. In both cases githog stops,
+sentinel mid-loop because it hit a decision it couldn't make. In both cases homestead stops,
 moves the issue to `agent:blocked`, pushes the partial branch, and posts the reason / last
 output as a comment — never an auto-PR. The agent-initiated block is what makes
 unattended operation safe: hard questions surface to the human instead of being guessed.

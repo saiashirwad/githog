@@ -3,7 +3,7 @@ import * as os from "node:os";
 import { ServiceUnavailable } from "./errors.ts";
 import { applyTemplate, nextFreePort, readEnvVar, setEnvVar, slugify } from "./text.ts";
 import { capture, pollSchedule, probeTcp, run, runExit } from "./process.ts";
-import type { GithogConfig, Plan, WorktreeContext, WorktreeOptions } from "./types.ts";
+import type { HomesteadConfig, Plan, WorktreeContext, WorktreeOptions } from "./types.ts";
 
 const DEFAULT_ENV_SOURCE = ".env";
 const DEFAULT_ENV_FALLBACK = ".env.example";
@@ -21,8 +21,8 @@ interface Target {
 }
 
 // Locate the primary checkout (where the shared services + canonical .env + the
-// githog config live). git-common-dir is "<primary>/.git" for every worktree.
-export const resolveRepo = Effect.fn("githog/resolve-repo")(function* () {
+// homestead config live). git-common-dir is "<primary>/.git" for every worktree.
+export const resolveRepo = Effect.fn("homestead/resolve-repo")(function* () {
   const path = yield* Path.Path;
   const startCwd = process.cwd();
   const gitCommonDirRaw = yield* capture("git", ["rev-parse", "--git-common-dir"], startCwd);
@@ -35,10 +35,10 @@ export const resolveRepo = Effect.fn("githog/resolve-repo")(function* () {
 
 // Resolve which worktree we're isolating — creating it first with `git worktree
 // add` when --create is given.
-const resolveTarget = Effect.fn("githog/resolve-target")(function* (
+const resolveTarget = Effect.fn("homestead/resolve-target")(function* (
   repo: Repo,
   options: WorktreeOptions,
-  config: GithogConfig,
+  config: HomesteadConfig,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -91,10 +91,10 @@ const resolveTarget = Effect.fn("githog/resolve-target")(function* (
 
 // Decide every isolated value (the worktree's existing .env wins for ports, so
 // re-runs are idempotent) without changing anything on disk.
-const resolvePlan = Effect.fn("githog/resolve-plan")(function* (
+const resolvePlan = Effect.fn("homestead/resolve-plan")(function* (
   repo: Repo,
   target: Target,
-  config: GithogConfig,
+  config: HomesteadConfig,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -172,7 +172,7 @@ const resolvePlan = Effect.fn("githog/resolve-plan")(function* (
   } satisfies Plan;
 });
 
-const printPlan = Effect.fn("githog/print-plan")(function* (plan: Plan) {
+const printPlan = Effect.fn("homestead/print-plan")(function* (plan: Plan) {
   const envSource = plan.reusedExistingEnv
     ? "existing .env (updated in place)"
     : plan.fellBackToExample
@@ -187,7 +187,7 @@ const printPlan = Effect.fn("githog/print-plan")(function* (plan: Plan) {
 });
 
 // Write the worktree's .env: the source body with our owned keys overridden.
-const writeEnv = Effect.fn("githog/write-env")(function* (plan: Plan) {
+const writeEnv = Effect.fn("homestead/write-env")(function* (plan: Plan) {
   const fs = yield* FileSystem.FileSystem;
   const lines = plan.envEdits.reduce(
     (acc, [key, value]) => setEnvVar(acc, key, value),
@@ -199,9 +199,9 @@ const writeEnv = Effect.fn("githog/write-env")(function* (plan: Plan) {
 
 // Make sure each configured TCP service is reachable (starting it if a `start`
 // command is given, then polling until it accepts connections).
-const ensureServices = Effect.fn("githog/ensure-services")(function* (
+const ensureServices = Effect.fn("homestead/ensure-services")(function* (
   repo: Repo,
-  config: GithogConfig,
+  config: HomesteadConfig,
 ) {
   for (const service of config.services ?? []) {
     const timeoutMs = service.timeoutMs ?? 15000;
@@ -236,7 +236,7 @@ const ensureServices = Effect.fn("githog/ensure-services")(function* (
 });
 
 // Run the config's ordered setup commands against the worktree.
-const runSetup = Effect.fn("githog/run-setup")(function* (repo: Repo, plan: Plan, config: GithogConfig) {
+const runSetup = Effect.fn("homestead/run-setup")(function* (repo: Repo, plan: Plan, config: HomesteadConfig) {
   const vars: Record<string, string> = {
     slug: plan.slug,
     branch: plan.branch,
@@ -268,15 +268,15 @@ const runSetup = Effect.fn("githog/run-setup")(function* (repo: Repo, plan: Plan
   }
 });
 
-const printDone = Effect.fn("githog/print-done")(function* (plan: Plan) {
+const printDone = Effect.fn("homestead/print-done")(function* (plan: Plan) {
   yield* Console.log(`\n✅ Worktree ready: ${plan.targetDir}`);
 });
 
 // Provision an isolated worktree from the project's config and return its
-// resolved Plan. Reusable from any githog effect (implement-issues calls it
+// resolved Plan. Reusable from any homestead effect (implement-issues calls it
 // in-process). Every fs/subprocess PlatformError becomes a defect — dev tooling;
 // the one error it surfaces is a service that won't come up.
-export const setupWorktree = (config: GithogConfig, options: WorktreeOptions) =>
+export const setupWorktree = (config: HomesteadConfig, options: WorktreeOptions) =>
   Effect.gen(function* () {
     const repo = yield* resolveRepo();
     const target = yield* resolveTarget(repo, options, config);
@@ -307,7 +307,7 @@ export const setupWorktree = (config: GithogConfig, options: WorktreeOptions) =>
       yield* config.afterSetup(ctx).pipe(Effect.orDie);
     }
 
-    // Loop skills are installed once by `githog init` on the default branch, so the
+    // Loop skills are installed once by `homestead init` on the default branch, so the
     // worktree inherits them already-committed (no per-worktree seeding, which used
     // to commit them into every issue branch's diff).
 

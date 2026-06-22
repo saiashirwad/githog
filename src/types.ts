@@ -1,10 +1,10 @@
 import type { Effect, FileSystem, Path } from "effect";
 import type { ChildProcessSpawner } from "effect/unstable/process";
 
-// The ambient platform services every githog effect runs against. BunServices.layer
+// The ambient platform services every homestead effect runs against. BunServices.layer
 // satisfies this in full, so config authors writing an `afterSetup` hook never have
 // to provide anything — they just `yield*` FileSystem / Path / a subprocess.
-export type GithogServices =
+export type HomesteadServices =
   | FileSystem.FileSystem
   | Path.Path
   | ChildProcessSpawner.ChildProcessSpawner;
@@ -67,8 +67,8 @@ export interface EnvConfig {
   readonly derive?: ((ctx: WorktreeContext) => Record<string, string>) | undefined;
 }
 
-// `githog listen` — poll the repo and auto-implement issues that carry the
-// trigger label. The label is the queue: githog claims an issue by swapping it
+// `homestead listen` — poll the repo and auto-implement issues that carry the
+// trigger label. The label is the queue: homestead claims an issue by swapping it
 // from `label` to the issues.label ("agent:wip") so it isn't picked up twice.
 export interface ListenConfig {
   readonly label?: string | undefined; // trigger label (default "agent:ready")
@@ -86,7 +86,7 @@ export interface LoopPromptContext {
   readonly blockedTag: string;
 }
 
-// The agent loop's knobs (per ADR-0001). githog drives the agent headlessly: a
+// The agent loop's knobs (per ADR-0001). homestead drives the agent headlessly: a
 // one-shot plan pass decomposes the issue into `taskFile`, then iterations pick
 // the next task until the agent emits `completionSentinel` (→ PR + agent:review)
 // or hits `maxIterations` / emits a `<blockedTag>` sentinel (→ agent:blocked).
@@ -94,8 +94,8 @@ export interface LoopConfig {
   readonly maxIterations?: number | undefined; // backstop cap on iterations (default 25)
   readonly completionSentinel?: string | undefined; // default "<promise>COMPLETE</promise>"
   readonly blockedTag?: string | undefined; // <tag>reason</tag> the agent emits (default "blocked")
-  readonly planSkill?: string | undefined; // skill invoked for the plan pass (default "githog-plan")
-  readonly implementSkill?: string | undefined; // skill invoked per iteration (default "githog-implement")
+  readonly planSkill?: string | undefined; // skill invoked for the plan pass (default "homestead-plan")
+  readonly implementSkill?: string | undefined; // skill invoked per iteration (default "homestead-implement")
   readonly taskFile?: string | undefined; // durable cross-iteration task list (default "TASKS.md")
   // Continuity (ADR-0002), default false. false keeps ADR-0001 amnesia: every
   // iteration is a fresh claude context and `taskFile` is the only memory. true
@@ -150,11 +150,11 @@ export interface IssuesConfig {
   readonly blockedLabel?: string | undefined; // default "agent:blocked"
 }
 
-// The single per-project control surface, authored as githog.config.ts via
+// The single per-project control surface, authored as homestead.config.ts via
 // defineConfig. Everything worktree-setup.ts / implement-issues.ts hardcoded for
 // orderservice lives here as data (ports/services/setup) or typed functions
 // (derive/prompt/branch/afterSetup).
-export interface GithogConfig {
+export interface HomesteadConfig {
   readonly worktreeDir?:
     | ((ctx: { readonly repoName: string; readonly slug: string; readonly branch: string }) => string)
     | undefined;
@@ -168,7 +168,7 @@ export interface GithogConfig {
   // Effect escape hatch: arbitrary provisioning after the declarative setup steps,
   // with the full platform at hand. Runs before the agent launches.
   readonly afterSetup?:
-    | ((ctx: WorktreeContext & { readonly plan: Plan }) => Effect.Effect<void, unknown, GithogServices>)
+    | ((ctx: WorktreeContext & { readonly plan: Plan }) => Effect.Effect<void, unknown, HomesteadServices>)
     | undefined;
 }
 

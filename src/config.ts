@@ -1,31 +1,31 @@
 import { Effect, FileSystem, Path } from "effect";
 import { pathToFileURL } from "node:url";
 import { ConfigInvalid, ConfigNotFound } from "./errors.ts";
-import type { GithogConfig } from "./types.ts";
+import type { HomesteadConfig } from "./types.ts";
 
-const CONFIG_BASENAMES = ["githog.config.ts", "githog.config.js", "githog.config.mjs"] as const;
+const CONFIG_BASENAMES = ["homestead.config.ts", "homestead.config.js", "homestead.config.mjs"] as const;
 
 // How the user's TypeScript config crosses the dynamic-import boundary WITHOUT a
 // cast: defineConfig is a typed identity that also stashes its argument here.
 // Loading the config file evaluates `export default defineConfig({...})`, whose
-// side effect lands the already-`GithogConfig`-typed value in `registered`. We
+// side effect lands the already-`HomesteadConfig`-typed value in `registered`. We
 // then read it back fully typed — no `as`, no asserting an `unknown` import.
-let registered: GithogConfig | undefined;
+let registered: HomesteadConfig | undefined;
 
-export const defineConfig = (config: GithogConfig): GithogConfig => {
+export const defineConfig = (config: HomesteadConfig): HomesteadConfig => {
   registered = config;
   return config;
 };
 
 // The trust boundary for a config authored as a plain `export default { ... }`
-// (no `githog` import needed — handy in repos where the package isn't resolvable).
+// (no `homestead` import needed — handy in repos where the package isn't resolvable).
 // A config file is the user's own typed code, not untrusted serialized data, so a
 // type guard at this single seam is the honest narrowing: we confirm it's an
 // object and trust the function/field shapes (validate() still checks the data).
-const isConfigObject = (value: unknown): value is GithogConfig =>
+const isConfigObject = (value: unknown): value is HomesteadConfig =>
   typeof value === "object" && value !== null;
 
-const defaultExport = (mod: unknown): GithogConfig | undefined => {
+const defaultExport = (mod: unknown): HomesteadConfig | undefined => {
   if (typeof mod !== "object" || mod === null || !("default" in mod)) return undefined;
   return isConfigObject(mod.default) ? mod.default : undefined;
 };
@@ -34,7 +34,7 @@ const defaultExport = (mod: unknown): GithogConfig | undefined => {
 // Functions are trusted via defineConfig's typing; the data we still check here
 // is what a slip past the type-checker (or a hand-written JS config) could break.
 
-const validate = (config: GithogConfig): Effect.Effect<GithogConfig, ConfigInvalid> =>
+const validate = (config: HomesteadConfig): Effect.Effect<HomesteadConfig, ConfigInvalid> =>
   Effect.gen(function* () {
     for (const [i, port] of (config.ports ?? []).entries()) {
       if (!Number.isInteger(port.base) || port.base < 0) {
@@ -63,10 +63,10 @@ const validate = (config: GithogConfig): Effect.Effect<GithogConfig, ConfigInval
     return config;
   });
 
-// Walk up from `startDir` to the filesystem root looking for a githog config
+// Walk up from `startDir` to the filesystem root looking for a homestead config
 // file, import it, and hand back the registered config. Mirrors how worktree
 // tooling finds the primary checkout — config lives at the repo root.
-export const loadConfig = Effect.fn("githog/load-config")(function* (startDir: string) {
+export const loadConfig = Effect.fn("homestead/load-config")(function* (startDir: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
 
@@ -82,7 +82,7 @@ export const loadConfig = Effect.fn("githog/load-config")(function* (startDir: s
             new ConfigInvalid({ path: candidate, reason: `failed to import: ${String(cause)}` }),
         });
         // Prefer the defineConfig registry (type-safe); fall back to a plain
-        // `export default { ... }` so a config needs no githog import.
+        // `export default { ... }` so a config needs no homestead import.
         const config = registered ?? defaultExport(mod);
         if (config === undefined) {
           return yield* new ConfigInvalid({

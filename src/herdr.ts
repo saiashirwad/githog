@@ -13,17 +13,17 @@ const decodeSurfaceCreated = Schema.decodeUnknownEffect(Schema.fromJsonString(Su
 // empty for run/send-*). Talks to the running herdr over its unix socket.
 const herdr = (...args: ReadonlyArray<string>) => capture("herdr", args);
 
-const createSurface = Effect.fn("githog/create-surface")(function* (
+const createSurface = Effect.fn("homestead/create-surface")(function* (
   surface: "worktree" | "workspace" | "tab",
   dir: string,
   label: string,
 ) {
-  // The parent repo workspace to nest under — the herdr workspace githog is
+  // The parent repo workspace to nest under — the herdr workspace homestead is
   // running in (the repo's main). HERDR_WORKSPACE_ID is set inside every pane.
   const parent = process.env.HERDR_WORKSPACE_ID;
   const parentArg = parent === undefined ? ["--cwd", process.cwd()] : ["--workspace", parent];
 
-  // "worktree" (default): open the git worktree githog just created as a CHILD
+  // "worktree" (default): open the git worktree homestead just created as a CHILD
   // of the repo's workspace, so it nests under it in herdr (rather than a flat
   // detached workspace, which is what `workspace create --cwd` produces).
   const args =
@@ -37,14 +37,14 @@ const createSurface = Effect.fn("githog/create-surface")(function* (
   return created.result.root_pane.pane_id;
 });
 
-// For one work item: open a herdr surface at the worktree and run the githog
+// For one work item: open a herdr surface at the worktree and run the homestead
 // agent loop INSIDE that pane (ADR-0001). The pane is a window, not a driver —
 // the loop drives the agent by headless re-invocation, we just give it somewhere
-// watchable to scroll. `pane run` re-invokes THIS githog (argv[0] = the bun
-// runtime, argv[1] = the resolved cli entry) as `githog loop <issue-url>`, which
+// watchable to scroll. `pane run` re-invokes THIS homestead (argv[0] = the bun
+// runtime, argv[1] = the resolved cli entry) as `homestead loop <issue-url>`, which
 // loads the worktree's config and runs the loop. Returns immediately; the loop
 // then lives independently in the pane.
-export const launchAgent = Effect.fn("githog/launch-agent")(function* (
+export const launchAgent = Effect.fn("homestead/launch-agent")(function* (
   item: WorkItem,
   dir: string,
   agent: AgentConfig,
@@ -55,8 +55,8 @@ export const launchAgent = Effect.fn("githog/launch-agent")(function* (
   const pane = yield* createSurface(surface, dir, `issue-${item.number}`);
 
   const runtime = process.argv[0] ?? "bun";
-  const entry = process.argv[1] ?? "githog";
+  const entry = process.argv[1] ?? "homestead";
   yield* herdr("pane", "run", pane, runtime, entry, "loop", item.url);
 
-  yield* Console.log(`  ✓ #${item.number}: githog loop ${item.url}  (herdr pane ${pane})`);
+  yield* Console.log(`  ✓ #${item.number}: homestead loop ${item.url}  (herdr pane ${pane})`);
 });

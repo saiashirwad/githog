@@ -23,7 +23,7 @@ const DEFAULT_BLOCKED_LABEL = "agent:blocked";
 // Returns whether the push succeeded — a non-fast-forward rejection (e.g. a stale
 // origin/<branch> left by a prior run) must NOT be ignored, or we'd open a PR
 // against the wrong commit. Idempotent: re-pushing an up-to-date branch is a no-op.
-const pushBranch = Effect.fn("githog/runner/push")(function* (cwd: string, branch: string) {
+const pushBranch = Effect.fn("homestead/runner/push")(function* (cwd: string, branch: string) {
   const code = yield* runExit("git", ["push", "-u", "origin", branch], { cwd }).pipe(
     Effect.catchCause(() => Effect.succeed(1)),
   );
@@ -38,7 +38,7 @@ const pushBranch = Effect.fn("githog/runner/push")(function* (cwd: string, branc
 // commit. The original task subjects go into the commit body so nothing is lost.
 // Best-effort: if the base can't be resolved or there's ≤1 commit, leave history
 // as-is rather than risk mangling it.
-const squashToOne = Effect.fn("githog/runner/squash")(function* (cwd: string, item: WorkItem, branch: string) {
+const squashToOne = Effect.fn("homestead/runner/squash")(function* (cwd: string, item: WorkItem, branch: string) {
   // The branch's fork point from the repo's default branch (what the PR targets).
   const defaultRef = yield* capture("git", ["rev-parse", "--abbrev-ref", "origin/HEAD"], cwd).pipe(
     Effect.catchCause(() => Effect.succeed("")),
@@ -63,7 +63,7 @@ const squashToOne = Effect.fn("githog/runner/squash")(function* (cwd: string, it
     .split("\n")
     .filter((s) => s.trim() !== "")
     .map((s) => `- ${s}`)
-    .join("\n")}\n\n🤖 Squashed from ${count} loop commits by githog.`;
+    .join("\n")}\n\n🤖 Squashed from ${count} loop commits by homestead.`;
 
   yield* runExit("git", ["reset", "--soft", base], { cwd });
   yield* runExit("git", ["commit", "-m", item.title, "-m", body], { cwd });
@@ -71,8 +71,8 @@ const squashToOne = Effect.fn("githog/runner/squash")(function* (cwd: string, it
 });
 
 // Open a PR from the worktree's branch, linking the issue so a merge closes it.
-const openPr = Effect.fn("githog/runner/open-pr")(function* (cwd: string, item: WorkItem, branch: string) {
-  const body = `Closes #${item.number}\n\n🤖 Opened by githog's agent loop.`;
+const openPr = Effect.fn("homestead/runner/open-pr")(function* (cwd: string, item: WorkItem, branch: string) {
+  const body = `Closes #${item.number}\n\n🤖 Opened by homestead's agent loop.`;
   yield* runExit(
     "gh",
     ["pr", "create", "--head", branch, "--title", item.title, "--body", body],
@@ -86,7 +86,7 @@ const openPr = Effect.fn("githog/runner/open-pr")(function* (cwd: string, item: 
 // pure `decide` says to finish. On Complete: PR + agent:review (worktree left
 // alive). On Blocked (cap exhausted or `<blocked>`): push + agent:blocked + the
 // reason as a comment. Runs INSIDE the herdr pane so iterations are watchable.
-export const runLoop = Effect.fn("githog/run-loop")(function* (
+export const runLoop = Effect.fn("homestead/run-loop")(function* (
   item: WorkItem,
   worktreeDir: string,
   branch: string,
@@ -127,7 +127,7 @@ export const runLoop = Effect.fn("githog/run-loop")(function* (
       { cwd: worktreeDir },
     );
 
-  const finish = Effect.fn("githog/runner/finish")(function* (terminal: Terminal) {
+  const finish = Effect.fn("homestead/runner/finish")(function* (terminal: Terminal) {
     if (terminal._tag === "Complete") {
       // Squash the per-iteration commits into one BEFORE pushing, so the PR shows a
       // single clean commit rather than one per task.
@@ -137,7 +137,7 @@ export const runLoop = Effect.fn("githog/run-loop")(function* (
       // would point at the wrong commit. Block instead so the failure is visible.
       if (!pushed) {
         const reason = `branch '${branch}' could not be pushed (stale remote branch?) — refusing to open a PR against the wrong commit`;
-        if (trackLabels) yield* markBlocked(wipLabel, blockedLabel, item.number, `🛑 githog: ${reason}`);
+        if (trackLabels) yield* markBlocked(wipLabel, blockedLabel, item.number, `🛑 homestead: ${reason}`);
         yield* Console.log(`\n⛔ #${item.number} blocked: ${reason}${trackLabels ? ` — moved to '${blockedLabel}'` : ""}`);
         return;
       }
@@ -147,13 +147,13 @@ export const runLoop = Effect.fn("githog/run-loop")(function* (
     } else {
       // Blocked: push the partial branch AS-IS (granular history aids debugging) — no squash.
       yield* pushBranch(worktreeDir, branch);
-      const comment = `🛑 githog: agent blocked on \`${branch}\` — ${terminal.reason}`;
+      const comment = `🛑 homestead: agent blocked on \`${branch}\` — ${terminal.reason}`;
       if (trackLabels) yield* markBlocked(wipLabel, blockedLabel, item.number, comment);
       yield* Console.log(`\n⛔ #${item.number} blocked: ${terminal.reason}${trackLabels ? ` — moved to '${blockedLabel}'` : ""}`);
     }
   });
 
-  yield* Console.log(`\n▸ githog agent loop for #${item.number}: ${item.title}`);
+  yield* Console.log(`\n▸ homestead agent loop for #${item.number}: ${item.title}`);
 
   let state: LoopState = { planned: false, iterations: 0, maxIterations: loop.maxIterations };
   let outcome: Outcome = { _tag: "Working" };

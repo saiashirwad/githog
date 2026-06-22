@@ -40,7 +40,7 @@ const decodeRepoView = Schema.decodeUnknownEffect(Schema.fromJsonString(RepoView
 
 // "owner/repo" of the repo the current directory belongs to (per gh). Used to
 // reject a URL that points at a different repo than the one you're standing in.
-export const currentRepoSlug = Effect.fn("githog/current-repo")(function* () {
+export const currentRepoSlug = Effect.fn("homestead/current-repo")(function* () {
   const json = yield* capture("gh", ["repo", "view", "--json", "nameWithOwner"]);
   const view = yield* decodeRepoView(json).pipe(Effect.orDie);
   return view.nameWithOwner;
@@ -48,7 +48,7 @@ export const currentRepoSlug = Effect.fn("githog/current-repo")(function* () {
 
 // Resolve an IssueRef to a WorkItem via the gh CLI (gh takes a number against the
 // current repo, or a full URL). A malformed response is a defect.
-export const resolveIssue = Effect.fn("githog/resolve-issue")(function* (ref: IssueRef) {
+export const resolveIssue = Effect.fn("homestead/resolve-issue")(function* (ref: IssueRef) {
   const json = yield* capture("gh", ["issue", "view", ref.ghArg, "--json", "number,url,title"]);
   const item: WorkItem = yield* decodeIssueView(json).pipe(Effect.orDie);
   return item;

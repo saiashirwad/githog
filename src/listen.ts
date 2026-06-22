@@ -4,7 +4,7 @@ import { capture, runExit } from "./process.ts";
 import { claimReady, markBlocked, markStarted } from "./tracking.ts";
 import { resolveRepo, setupWorktree } from "./worktree.ts";
 import type { Reporter } from "./dashboard/reporter.ts";
-import type { GithogConfig, WorkItem } from "./types.ts";
+import type { HomesteadConfig, WorkItem } from "./types.ts";
 
 const DEFAULT_READY_LABEL = "agent:ready";
 const DEFAULT_WIP_LABEL = "agent:wip";
@@ -22,7 +22,7 @@ const decodeIssueRows = Schema.decodeUnknownEffect(Schema.fromJsonString(IssueRo
 
 // Open issues carrying `label`, or `undefined` when the gh query failed (so the
 // caller can skip the tick rather than mistake a failure for "nothing ready").
-const listByLabel = Effect.fn("githog/listen/list")(function* (label: string) {
+const listByLabel = Effect.fn("homestead/listen/list")(function* (label: string) {
   const json = yield* capture("gh", [
     "issue",
     "list",
@@ -39,7 +39,7 @@ const listByLabel = Effect.fn("githog/listen/list")(function* (label: string) {
   return yield* decodeIssueRows(json).pipe(Effect.catchCause(() => Effect.succeed(undefined)));
 });
 
-const branchExists = Effect.fn("githog/listen/branch-exists")(function* (primaryRoot: string, branch: string) {
+const branchExists = Effect.fn("homestead/listen/branch-exists")(function* (primaryRoot: string, branch: string) {
   return (
     (yield* runExit("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], {
       cwd: primaryRoot,
@@ -47,13 +47,13 @@ const branchExists = Effect.fn("githog/listen/branch-exists")(function* (primary
   );
 });
 
-// Is a `githog loop` still running for this issue? The loop is one long-lived
+// Is a `homestead loop` still running for this issue? The loop is one long-lived
 // `bun … loop <issue-url>` process that outlives each `claude -p` iteration, so its
 // presence means alive, its absence means the loop died. We match `/issues/<n>` in
 // the process list (the `(?!\d)` keeps #3 from matching #30). Single-box assumption,
 // which is what `listen` is for. On any uncertainty (ps unavailable) we assume ALIVE
 // so a flaky check can never reclaim a healthy loop.
-const loopAlive = Effect.fn("githog/listen/loop-alive")(function* (number: number) {
+const loopAlive = Effect.fn("homestead/listen/loop-alive")(function* (number: number) {
   const out = yield* capture("ps", ["-A", "-ww", "-o", "command="]).pipe(
     Effect.catchCause(() => Effect.succeed("")),
   );
@@ -65,10 +65,10 @@ const loopAlive = Effect.fn("githog/listen/loop-alive")(function* (number: numbe
 // and running the same provision→launch→mark flow as implement-issues. Per-issue
 // and per-tick failures are caught so the daemon never dies. `reporter` decides
 // presentation (plain log vs the TUI dashboard).
-export const listen = Effect.fn("githog/listen")(function* (config: GithogConfig, reporter: Reporter) {
+export const listen = Effect.fn("homestead/listen")(function* (config: HomesteadConfig, reporter: Reporter) {
   const agent = config.agent;
   if (agent === undefined) {
-    return yield* Effect.die(new Error("[githog] config has no `agent` block — listen needs one to launch claude."));
+    return yield* Effect.die(new Error("[homestead] config has no `agent` block — listen needs one to launch claude."));
   }
   const repo = yield* resolveRepo();
   const readyLabel = config.listen?.label ?? DEFAULT_READY_LABEL;
@@ -88,7 +88,7 @@ export const listen = Effect.fn("githog/listen")(function* (config: GithogConfig
 
   yield* reporter.header({ repoName: repo.repoName, readyLabel, intervalSeconds, maxConcurrent });
 
-  const handle = Effect.fn("githog/listen/handle")(function* (item: WorkItem) {
+  const handle = Effect.fn("homestead/listen/handle")(function* (item: WorkItem) {
     const branch = branchOf(item);
     if (yield* branchExists(repo.primaryRoot, branch)) {
       yield* reporter.status({ number: item.number, title: item.title, status: "failed", step: "branch exists" });
@@ -140,7 +140,7 @@ export const listen = Effect.fn("githog/listen")(function* (config: GithogConfig
           wipLabel,
           blockedLabel,
           w.number,
-          `🛑 githog: the loop for #${w.number} is no longer running (crashed or interrupted) and it sat in \`${wipLabel}\` past ${Math.round(ORPHAN_GRACE_MS / 60000)}m — reclaimed by the daemon to free a slot. Re-label \`${readyLabel}\` to retry it.`,
+          `🛑 homestead: the loop for #${w.number} is no longer running (crashed or interrupted) and it sat in \`${wipLabel}\` past ${Math.round(ORPHAN_GRACE_MS / 60000)}m — reclaimed by the daemon to free a slot. Re-label \`${readyLabel}\` to retry it.`,
         );
         dead.delete(w.number);
         reclaimed += 1;

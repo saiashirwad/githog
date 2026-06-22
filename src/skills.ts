@@ -3,14 +3,14 @@ import type { ResolvedLoop } from "./loop.ts";
 import type { LoopPromptContext } from "./types.ts";
 
 // The prompt logic for each loop stage, shipped as versioned Claude skills that
-// githog seeds into a worktree at provision time (CONTEXT.md → "Skills"). The
+// homestead seeds into a worktree at provision time (CONTEXT.md → "Skills"). The
 // skill BODY is the single source of truth: the runner invokes the skill by name
 // when its SKILL.md is present in the worktree, and falls back to the same text
-// inline when it isn't (so githog works in a repo that never installed them).
+// inline when it isn't (so homestead works in a repo that never installed them).
 // The task-file name and sentinel tokens are baked in from the resolved config so
 // a hand-run skill and a headless run behave identically.
 
-// These skills are only ever fired by githog (the loop invokes them by name) or by
+// These skills are only ever fired by homestead (the loop invokes them by name) or by
 // hand — never autonomously by the model mid-work — so they carry
 // `disable-model-invocation: true`: zero per-turn context load, still callable as
 // `/<name> <url>`. The `description` is therefore human-facing.
@@ -39,7 +39,7 @@ const vocabularyNote = "Read `CONTEXT.md` and any ADRs under `docs/adr/` touchin
 // --- skill bodies (parameterised by the resolved loop settings) -------------
 
 const planBody = (loop: ResolvedLoop): string =>
-  `You are running githog's **plan pass** for one GitHub issue. You PLAN ONLY — write
+  `You are running homestead's **plan pass** for one GitHub issue. You PLAN ONLY — write
 no production code, tests, or other files in this pass.
 
 You are given an issue URL as the argument. Steps:
@@ -58,14 +58,14 @@ You are given an issue URL as the argument. Steps:
 
    ${taskFormat(loop)}
 
-4. Do NOT commit \`${loop.taskFile}\` — githog git-ignores it; it is loop scaffolding,
+4. Do NOT commit \`${loop.taskFile}\` — homestead git-ignores it; it is loop scaffolding,
    not part of the change. Just leave it written on disk.
 
 If the issue is too ambiguous to decompose without a decision only a human can make,
 emit \`<${loop.sentinels.blockedTag}>your question here</${loop.sentinels.blockedTag}>\` and stop.`;
 
 const implementBody = (loop: ResolvedLoop): string =>
-  `You are running ONE iteration of githog's **agent loop** for a GitHub issue
+  `You are running ONE iteration of homestead's **agent loop** for a GitHub issue
 (URL given as the argument). The loop has **amnesia**: every iteration starts from a
 CLEAN context, so the on-disk \`${loop.taskFile}\` is your only memory of what is
 already done. Each task there is a **vertical slice** whose indented \`- [ ]\` lines
@@ -97,23 +97,23 @@ Then end THIS iteration:
   a destructive or irreversible choice), emit
   \`<${loop.sentinels.blockedTag}>your question here</${loop.sentinels.blockedTag}>\`
   and stop — do not guess.
-- Otherwise just stop; githog starts the next iteration with a fresh context.
+- Otherwise just stop; homestead starts the next iteration with a fresh context.
 
 One slice per iteration — resist finishing the next task, even a tempting small one. The
 clean context next iteration is what keeps each slice sharp.`;
 
 const planDoc = (loop: ResolvedLoop, name: string): string =>
-  frontmatter(name, "githog plan pass: decompose an issue into a vertical-slice task list with acceptance criteria (plan only)", planBody(loop));
+  frontmatter(name, "homestead plan pass: decompose an issue into a vertical-slice task list with acceptance criteria (plan only)", planBody(loop));
 
 const implementDoc = (loop: ResolvedLoop, name: string): string =>
-  frontmatter(name, "githog agent-loop iteration: implement the next vertical slice from the task list", implementBody(loop));
+  frontmatter(name, "homestead agent-loop iteration: implement the next vertical slice from the task list", implementBody(loop));
 
 const skillPath = (path: Path.Path, targetDir: string, name: string): string =>
   path.join(targetDir, ".claude", "skills", name, "SKILL.md");
 
 // True when the worktree already carries the skill's SKILL.md — a repo that
-// committed or customised it wins over githog's bundled default.
-export const skillPresent = Effect.fn("githog/skills/present")(function* (targetDir: string, name: string) {
+// committed or customised it wins over homestead's bundled default.
+export const skillPresent = Effect.fn("homestead/skills/present")(function* (targetDir: string, name: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   return yield* fs
@@ -122,11 +122,11 @@ export const skillPresent = Effect.fn("githog/skills/present")(function* (target
 });
 
 // Write the bundled plan/implement skills into a repo's .claude/skills, skipping
-// any the repo already provides. Called by `githog init` (once, on the default
+// any the repo already provides. Called by `homestead init` (once, on the default
 // branch) so worktrees inherit the skills already-committed and never carry them in
 // an issue branch's diff. Best-effort: a write failure warns and continues (the
 // runner's inline fallback still works for a repo that never ran init).
-export const writeSkills = Effect.fn("githog/skills/write")(function* (targetDir: string, loop: ResolvedLoop) {
+export const writeSkills = Effect.fn("homestead/skills/write")(function* (targetDir: string, loop: ResolvedLoop) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
 

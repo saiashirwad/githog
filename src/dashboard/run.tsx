@@ -16,18 +16,18 @@ import { Dashboard } from "./ui.tsx";
 // of the terminal.
 export const runListenTui = async (): Promise<void> => {
   if (process.env.HERDR_ENV !== "1") {
-    console.error("[githog] not inside a herdr pane (HERDR_ENV != 1) — run listen from a herdr terminal.");
+    console.error("[homestead] not inside a herdr pane (HERDR_ENV != 1) — run listen from a herdr terminal.");
     process.exit(1);
   }
 
   const config = await Effect.runPromise(loadConfig(process.cwd()).pipe(Effect.provide(BunServices.layer))).catch(
     (error: unknown) => {
-      console.error(`[githog] ${String(error)}`);
+      console.error(`[homestead] ${String(error)}`);
       process.exit(1);
     },
   );
   if (config.agent === undefined) {
-    console.error("[githog] config has no `agent` block — listen needs one to launch claude.");
+    console.error("[homestead] config has no `agent` block — listen needs one to launch claude.");
     process.exit(1);
   }
 

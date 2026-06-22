@@ -2,7 +2,7 @@ import { Console, Effect, Schema } from "effect";
 import { capture, runExit } from "./process.ts";
 import { markStopped } from "./tracking.ts";
 
-// `githog kill` — the inverse of implement-issues/setup. For a branch it: closes
+// `homestead kill` — the inverse of implement-issues/setup. For a branch it: closes
 // the herdr worktree workspace (which also removes the git worktree), reconciles
 // any leftover git worktree, then deletes the branch. All steps are best-effort
 // and idempotent: anything already gone is skipped, so re-running is safe.
@@ -22,7 +22,7 @@ const HerdrWorktrees = Schema.Struct({
 const decodeHerdrWorktrees = Schema.decodeUnknownEffect(Schema.fromJsonString(HerdrWorktrees));
 
 // The git worktree path checked out on `branch` (porcelain), or undefined.
-const worktreePathForBranch = Effect.fn("githog/worktree-path")(function* (
+const worktreePathForBranch = Effect.fn("homestead/worktree-path")(function* (
   primaryRoot: string,
   branch: string,
 ) {
@@ -40,7 +40,7 @@ const worktreePathForBranch = Effect.fn("githog/worktree-path")(function* (
 
 // The herdr workspace id whose worktree is on `branch`, or undefined when no herdr
 // worktree is open for it (or herdr isn't reachable — best-effort).
-const herdrWorkspaceForBranch = Effect.fn("githog/herdr-workspace")(function* (
+const herdrWorkspaceForBranch = Effect.fn("homestead/herdr-workspace")(function* (
   primaryRoot: string,
   branch: string,
 ) {
@@ -53,14 +53,14 @@ const herdrWorkspaceForBranch = Effect.fn("githog/herdr-workspace")(function* (
   return list.result.worktrees.find((wt) => wt.branch === branch)?.open_workspace_id ?? undefined;
 });
 
-export const killBranch = Effect.fn("githog/kill-branch")(function* (
+export const killBranch = Effect.fn("homestead/kill-branch")(function* (
   primaryRoot: string,
   repoName: string,
   branch: string,
 ) {
   yield* Console.log(`\n▸ Killing '${branch}'`);
 
-  // 0. reverse any GitHub issue signals githog applied at launch (opt-in; reads a
+  // 0. reverse any GitHub issue signals homestead applied at launch (opt-in; reads a
   // state file, so config-free and a no-op when nothing was tracked).
   yield* markStopped(repoName, branch);
 

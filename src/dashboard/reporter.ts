@@ -38,7 +38,7 @@ export interface Reporter {
 export const consoleReporter: Reporter = {
   header: (info) =>
     Console.log(
-      `\n▸ githog listen — repo ${info.repoName}, trigger '${info.readyLabel}', every ${info.intervalSeconds}s, max ${info.maxConcurrent} concurrent agents`,
+      `\n▸ homestead listen — repo ${info.repoName}, trigger '${info.readyLabel}', every ${info.intervalSeconds}s, max ${info.maxConcurrent} concurrent agents`,
     ),
   poll: (update) =>
     update.newNumbers.length === 0 && update.finishedNumbers.length === 0

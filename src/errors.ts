@@ -1,12 +1,12 @@
 import { Data } from "effect";
 
-// githog's typed domain errors. IO/subprocess failures are deliberately NOT
+// homestead's typed domain errors. IO/subprocess failures are deliberately NOT
 // modelled here — like the scripts this generalizes, those are dev-tooling
 // defects (Effect.orDie). These tagged errors are the few conditions an
 // operator can actually act on: a missing/!malformed config, a service that
 // never came up, an unusable database/identifier.
 
-// The project has no githog.config.ts, or it does not call defineConfig.
+// The project has no homestead.config.ts, or it does not call defineConfig.
 export class ConfigNotFound extends Data.TaggedError("ConfigNotFound")<{
   readonly searchedFrom: string;
   readonly detail: string;

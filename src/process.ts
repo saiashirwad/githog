@@ -6,7 +6,7 @@ import * as net from "node:net";
 // and re-emit it line-by-line via Console.log — so a custom Console can route it
 // into the dashboard instead of letting it scribble over the rendered UI. Default
 // false: subprocesses inherit stdio exactly as before (the plain CLI path).
-export const OutputCapture = Context.Reference<boolean>("githog/OutputCapture", {
+export const OutputCapture = Context.Reference<boolean>("homestead/OutputCapture", {
   defaultValue: () => false,
 });
 
@@ -32,7 +32,7 @@ const makeOptions = (options: RunOptions | undefined) => ({
 // Run a subprocess and return its exit code. Inherits stdio by default; under the
 // TUI scope (OutputCapture = true) it pipes stdout+stderr and re-emits each line
 // via Console.log so the dashboard can capture it.
-export const runExit = Effect.fn("githog/run-exit")(function* (
+export const runExit = Effect.fn("homestead/run-exit")(function* (
   command: string,
   args: ReadonlyArray<string>,
   options?: RunOptions,
@@ -66,7 +66,7 @@ export const runExit = Effect.fn("githog/run-exit")(function* (
 });
 
 // Run a subprocess and die if it exits non-zero. Use when failure is fatal.
-export const run = Effect.fn("githog/run")(function* (
+export const run = Effect.fn("homestead/run")(function* (
   label: string,
   command: string,
   args: ReadonlyArray<string>,
@@ -74,7 +74,7 @@ export const run = Effect.fn("githog/run")(function* (
 ) {
   const code = yield* runExit(command, args, options);
   if (code !== 0) {
-    return yield* Effect.die(new Error(`[githog] ${label} failed (exit ${code})`));
+    return yield* Effect.die(new Error(`[homestead] ${label} failed (exit ${code})`));
   }
   return code;
 });
@@ -98,7 +98,7 @@ export interface AgentInvocation {
 // supplies the claude args (including `-p <prompt>`, `--output-format stream-json
 // --verbose`, and any `--resume <id>`); stdout carries the JSON, stderr is echoed
 // raw. Non-JSON stdout lines (stray warnings) are echoed rather than dropped.
-export const captureAgent = Effect.fn("githog/capture-agent")(function* (
+export const captureAgent = Effect.fn("homestead/capture-agent")(function* (
   command: string,
   args: ReadonlyArray<string>,
   options?: RunOptions,
@@ -162,7 +162,7 @@ export const captureAgent = Effect.fn("githog/capture-agent")(function* (
 });
 
 // Run a subprocess and capture its trimmed stdout (for git / gh / herdr plumbing).
-export const capture = Effect.fn("githog/capture")(function* (
+export const capture = Effect.fn("homestead/capture")(function* (
   command: string,
   args: ReadonlyArray<string>,
   cwd?: string,

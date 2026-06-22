@@ -1,4 +1,4 @@
-# 1. githog drives a headless agent loop instead of an interactive agent
+# 1. homestead drives a headless agent loop instead of an interactive agent
 
 Date: 2026-06-22
 
@@ -8,19 +8,19 @@ Accepted
 
 ## Context
 
-Until now, githog provisioned a worktree, opened a herdr pane, launched `claude`
+Until now, homestead provisioned a worktree, opened a herdr pane, launched `claude`
 interactively, waited for a ready marker, and typed a single prompt (e.g.
-`/implement <url>`). After sending that one prompt, githog was hands-off — herdr owned
-the live interactive process and githog never observed the agent's output again.
+`/implement <url>`). After sending that one prompt, homestead was hands-off — herdr owned
+the live interactive process and homestead never observed the agent's output again.
 
 This "launch once and forget" model has no quality floor and no completion signal: the
-agent gets one shot in one context window, and there is no way for githog to know whether
+agent gets one shot in one context window, and there is no way for homestead to know whether
 the issue was finished, to react to it, or to introspect what happened. We want a
 "software factory" that can work issues unattended and hand back reviewable results.
 
 ## Decision
 
-githog owns a **agent loop** per issue: the agent is re-invoked headlessly with a clean
+homestead owns a **agent loop** per issue: the agent is re-invoked headlessly with a clean
 context each **iteration** until the issue is done.
 
 - A **plan pass** runs first — a one-shot headless invocation that decomposes the issue
@@ -29,7 +29,7 @@ context each **iteration** until the issue is done.
 - Each **iteration** is a fresh headless invocation that picks the next incomplete task,
   implements it, runs its own checks, commits, and marks the task done.
 - The loop stops when the agent emits a **completion sentinel**
-  (`<promise>COMPLETE</promise>`); githog then opens a PR and moves the issue to
+  (`<promise>COMPLETE</promise>`); homestead then opens a PR and moves the issue to
   `agent:review`. An iteration cap or an agent-emitted `<blocked>` sentinel moves it to
   `agent:blocked` instead.
 - The loop is a single mechanism: headless re-invocation. It runs *inside* the herdr pane
@@ -41,13 +41,13 @@ context each **iteration** until the issue is done.
 
 ## Consequences
 
-- githog becomes a stateful orchestrator that observes agent output, not just a launcher.
+- homestead becomes a stateful orchestrator that observes agent output, not just a launcher.
   It must parse a noisy output stream for sentinels — fiddlier than typing one prompt.
 - Clean-context-per-iteration (the source of the loop's quality) holds for free, because
   every iteration is a fresh process.
-- The factory is introspectable: githog sees every iteration and can log it.
+- The factory is introspectable: homestead sees every iteration and can log it.
 - A bad task decomposition is not caught until PR/blocked time, since there is no plan
   gate. This is an accepted cost of true unattended operation; the iteration cap and PR
   review are the safety nets.
 - The previous `agent.prompt` / ready-marker interactive model is superseded. Prompt logic
-  moves into shipped skills (`/githog-plan`, `/githog-implement`) seeded into the worktree.
+  moves into shipped skills (`/homestead-plan`, `/homestead-implement`) seeded into the worktree.

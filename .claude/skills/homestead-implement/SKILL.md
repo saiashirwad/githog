@@ -1,10 +1,10 @@
 ---
-name: githog-implement
-description: githog agent-loop iteration: implement the next vertical slice from the task list
+name: homestead-implement
+description: homestead agent-loop iteration: implement the next vertical slice from the task list
 disable-model-invocation: true
 ---
 
-You are running ONE iteration of githog's **agent loop** for a GitHub issue
+You are running ONE iteration of homestead's **agent loop** for a GitHub issue
 (URL given as the argument). The loop has **amnesia**: every iteration starts from a
 CLEAN context, so the on-disk `TASKS.md` is your only memory of what is
 already done. Each task there is a **vertical slice** whose indented `- [ ]` lines
@@ -36,7 +36,7 @@ Then end THIS iteration:
   a destructive or irreversible choice), emit
   `<blocked>your question here</blocked>`
   and stop — do not guess.
-- Otherwise just stop; githog starts the next iteration with a fresh context.
+- Otherwise just stop; homestead starts the next iteration with a fresh context.
 
 One slice per iteration — resist finishing the next task, even a tempting small one. The
 clean context next iteration is what keeps each slice sharp.

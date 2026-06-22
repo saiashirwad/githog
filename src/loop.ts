@@ -110,8 +110,8 @@ export const resolveLoopSettings = (loop?: LoopConfig): ResolvedLoop => ({
     completion: loop?.completionSentinel ?? DEFAULT_SENTINELS.completion,
     blockedTag: loop?.blockedTag ?? DEFAULT_SENTINELS.blockedTag,
   },
-  planSkill: loop?.planSkill ?? "githog-plan",
-  implementSkill: loop?.implementSkill ?? "githog-implement",
+  planSkill: loop?.planSkill ?? "homestead-plan",
+  implementSkill: loop?.implementSkill ?? "homestead-implement",
   taskFile: loop?.taskFile ?? "TASKS.md",
   resume: loop?.resume ?? false,
 });

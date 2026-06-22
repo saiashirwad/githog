@@ -102,7 +102,7 @@ export const applyStatus = (
 
 // Reconcile a poll: rebuild the queued set, surface wip issues we aren't already
 // tracking with a finer status, and flag newly-pulled-in issues. Never downgrades
-// a row githog is actively driving (claiming/provisioning/implementing).
+// a row homestead is actively driving (claiming/provisioning/implementing).
 export const applyPoll = (
   state: DashboardState,
   poll: {
@@ -115,7 +115,7 @@ export const applyPoll = (
   const next: Record<number, IssueRow> = {};
   const newSet = new Set(poll.newNumbers);
 
-  // Carry over active + finished rows githog is tracking.
+  // Carry over active + finished rows homestead is tracking.
   for (const row of Object.values(state.rows)) {
     if (ACTIVE.has(row.status) || row.status === "finished") {
       next[row.number] = { ...row, isNew: false };

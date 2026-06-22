@@ -1,10 +1,10 @@
 ---
-name: githog-plan
-description: githog plan pass: decompose an issue into a vertical-slice task list with acceptance criteria (plan only)
+name: homestead-plan
+description: homestead plan pass: decompose an issue into a vertical-slice task list with acceptance criteria (plan only)
 disable-model-invocation: true
 ---
 
-You are running githog's **plan pass** for one GitHub issue. You PLAN ONLY — write
+You are running homestead's **plan pass** for one GitHub issue. You PLAN ONLY — write
 no production code, tests, or other files in this pass.
 
 You are given an issue URL as the argument. Steps:
@@ -31,7 +31,7 @@ You are given an issue URL as the argument. Steps:
      - [ ] Acceptance criterion
    ```
 
-4. Do NOT commit `TASKS.md` — githog git-ignores it; it is loop scaffolding,
+4. Do NOT commit `TASKS.md` — homestead git-ignores it; it is loop scaffolding,
    not part of the change. Just leave it written on disk.
 
 If the issue is too ambiguous to decompose without a decision only a human can make,

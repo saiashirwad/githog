@@ -1,8 +1,8 @@
-// githog — config-driven git-worktree + agent provisioning, built on Effect.
+// homestead — config-driven git-worktree + agent provisioning, built on Effect.
 //
-// Public surface for authoring a githog.config.ts and for embedding the
+// Public surface for authoring a homestead.config.ts and for embedding the
 // provisioner in your own Effect programs. The CLI lives in src/cli.ts
-// (bin: `githog`).
+// (bin: `homestead`).
 
 export { defineConfig, loadConfig } from "./src/config.ts";
 export { setupWorktree } from "./src/worktree.ts";
@@ -13,8 +13,8 @@ export { ConfigInvalid, ConfigNotFound, ServiceUnavailable } from "./src/errors.
 export type {
   AgentConfig,
   EnvConfig,
-  GithogConfig,
-  GithogServices,
+  HomesteadConfig,
+  HomesteadServices,
   IssuesConfig,
   ListenConfig,
   Plan,

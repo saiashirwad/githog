@@ -1,16 +1,16 @@
-// githog's own githog.config.ts — githog dogfooding itself.
+// homestead's own homestead.config.ts — homestead dogfooding itself.
 //
-// githog is a Bun + Effect CLI, not a server: no ports, no .env, no services,
+// homestead is a Bun + Effect CLI, not a server: no ports, no .env, no services,
 // no database. Provisioning a worktree is just `bun install` (whose `prepare`
 // lifecycle hook runs scripts/prepare-effect.sh to vendor Effect's source).
 //
 // Run from the repo root, inside a herdr session:
-//   githog setup --create my-feature
-//   githog implement-issues 2          # work issue #2 (the agent-loop PRD)
-//   githog listen                      # drain the agent:ready backlog
-//   githog kill my-feature
+//   homestead setup --create my-feature
+//   homestead implement-issues 2          # work issue #2 (the agent-loop PRD)
+//   homestead listen                      # drain the agent:ready backlog
+//   homestead kill my-feature
 
-import { defineConfig } from "githog";
+import { defineConfig } from "homestead";
 
 export default defineConfig({
   // No ports / env / services — a CLI worktree needs none of them.
@@ -19,7 +19,7 @@ export default defineConfig({
   setup: [{ label: "install", run: ["bun", "install"] }],
 
   // Opt-in issue tracking: reflect agent activity onto the GitHub issue.
-  // Added when an agent starts, reversed on `githog kill`.
+  // Added when an agent starts, reversed on `homestead kill`.
   issues: {
     branch: (item) => String(item.number),
     label: "agent:wip", // added on start (auto-created), removed on kill
@@ -32,13 +32,13 @@ export default defineConfig({
   // and edit files unattended (no interactive prompt exists to approve tools in
   // headless mode). Blast radius is the worktree + host bash; the PR review is the
   // gate, a sandbox is the future mitigation. Loop knobs (maxIterations, sentinels,
-  // /githog-plan + /githog-implement skills) take their defaults.
+  // /homestead-plan + /homestead-implement skills) take their defaults.
   agent: {
     command: ["claude", "--dangerously-skip-permissions"],
-    surface: "worktree", // nest each agent under githog's workspace in herdr
+    surface: "worktree", // nest each agent under homestead's workspace in herdr
   },
 
-  // `githog listen` — poll for open issues labelled agent:ready and auto-work
+  // `homestead listen` — poll for open issues labelled agent:ready and auto-work
   // them, up to maxConcurrent at a time. Kept low: each agent runs `bun install`
   // + vendors Effect, so 2 in flight is plenty for this repo.
   listen: {

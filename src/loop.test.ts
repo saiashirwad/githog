@@ -137,8 +137,8 @@ test("DEFAULT_SENTINELS are the documented tokens", () => {
 const resolved = (over: Partial<ResolvedLoop> = {}): ResolvedLoop => ({
   maxIterations: 5,
   sentinels: DEFAULT_SENTINELS,
-  planSkill: "githog-plan",
-  implementSkill: "githog-implement",
+  planSkill: "homestead-plan",
+  implementSkill: "homestead-implement",
   taskFile: "TASKS.md",
   resume: false,
   ...over,

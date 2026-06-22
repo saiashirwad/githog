@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "githog",
+      "name": "homestead",
       "dependencies": {
         "@effect/platform-bun": "^4.0.0-beta.85",
         "@opentui/core": "^0.4.1",

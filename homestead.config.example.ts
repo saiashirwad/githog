@@ -1,4 +1,4 @@
-// Example githog.config.ts — copy to `githog.config.ts` at your repo root and adapt.
+// Example homestead.config.ts — copy to `homestead.config.ts` at your repo root and adapt.
 //
 // This is a typical setup for a web app with a server + client and a shared
 // Postgres in docker: each worktree gets its own ports, its own logical database,
@@ -6,11 +6,11 @@
 // herdr surface per issue and tells the agent to `/implement` it.
 //
 // Run from the repo root (inside a herdr session for implement-issues):
-//   githog setup --create my-feature
-//   githog implement-issues 21 22 23
-//   githog kill my-feature
+//   homestead setup --create my-feature
+//   homestead implement-issues 21 22 23
+//   homestead kill my-feature
 
-import { defineConfig } from "githog";
+import { defineConfig } from "homestead";
 
 // Swap the db-name segment of a Postgres DSN, preserving creds/host/?query —
 // e.g. ".../myapp" + "myapp_my_feature" -> ".../myapp_my_feature".
@@ -58,7 +58,7 @@ export default defineConfig({
   ],
 
   // branch == issue number. The label/assign/comment fields are opt-in issue
-  // tracking: githog adds them when a loop starts and removes them on `githog
+  // tracking: homestead adds them when a loop starts and removes them on `homestead
   // kill`. `agent:wip` is also the listen concurrency gauge; the agent loop swaps
   // it to reviewLabel (completed, PR open) or blockedLabel (stuck) when it ends —
   // both free a listen slot. Omit label/assign/comment to never touch issues.
@@ -71,7 +71,7 @@ export default defineConfig({
     blockedLabel: "agent:blocked", // loop stuck/blocked: needs a human (default)
   },
 
-  // The agent runs as a agent loop (ADR-0001): githog runs a one-shot plan pass
+  // The agent runs as a agent loop (ADR-0001): homestead runs a one-shot plan pass
   // that decomposes the issue into TASKS.md, then re-invokes the agent headlessly
   // (`claude -p`) with a clean context each iteration until it emits the
   // completion sentinel (→ PR + agent:review) or hits the cap / emits `<blocked>`
@@ -85,7 +85,7 @@ export default defineConfig({
       maxIterations: 25, // backstop cap before the loop gives up -> agent:blocked
       // completionSentinel / blockedTag / planSkill / implementSkill / taskFile
       // all have sensible defaults; override only if you need to. The
-      // githog-plan / githog-implement skills are seeded into each worktree.
+      // homestead-plan / homestead-implement skills are seeded into each worktree.
       resume: false, // ADR-0002: false (default) = fresh context per iteration
       // (amnesia, ADR-0001). true = resume the same claude session each iteration
       // so context carries forward — trades the clean-context quality floor for
@@ -93,8 +93,8 @@ export default defineConfig({
     },
   },
 
-  // `githog listen` — poll the repo and auto-implement any open issue labelled
-  // with `label`. githog claims it (swaps the label to issues.label, "agent:wip")
+  // `homestead listen` — poll the repo and auto-implement any open issue labelled
+  // with `label`. homestead claims it (swaps the label to issues.label, "agent:wip")
   // and runs the same flow as implement-issues, up to maxConcurrent at a time.
   listen: {
     label: "agent:ready",

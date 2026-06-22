@@ -4,11 +4,11 @@ Date: 2026-06-22
 
 ## Status
 
-Accepted (extends [ADR-0001](0001-githog-driven-agent-loop.md), does not supersede it)
+Accepted (extends [ADR-0001](0001-homestead-driven-agent-loop.md), does not supersede it)
 
 ## Context
 
-ADR-0001 gave githog a per-issue agent loop driven by headless re-invocation. Two
+ADR-0001 gave homestead a per-issue agent loop driven by headless re-invocation. Two
 properties of that first cut were worth revisiting:
 
 1. **The completion signal was a substring grep over raw stdout.** The runner ran
@@ -25,7 +25,7 @@ properties of that first cut were worth revisiting:
    the alternative without a rewrite.
 
 We considered the larger move — a persistent interactive claude session per worktree that
-githog drives step-by-step over a live channel (Agent SDK, in-process session host). That
+homestead drives step-by-step over a live channel (Agent SDK, in-process session host). That
 is a coherent direction but a different loop philosophy and a substantial rewrite: it
 trades away the per-issue process isolation, the herdr-pane-per-issue watchability, and
 the `ps`-based liveness check that `listen` relies on. We deferred it until we know
@@ -62,7 +62,7 @@ A/B the two on real issues by flipping one config flag.
 - Amnesia remains the default, so every existing config behaves identically. Continuity is
   a per-project opt-in, not a fork in the codebase.
 - `stream-json` requires `--verbose`; both flags are added by the runner, not the user.
-- The persistent interactive-session model (githog hosting live sessions and pushing each
+- The persistent interactive-session model (homestead hosting live sessions and pushing each
   step in) is explicitly **not** adopted here. If the resume toggle shows continuity earns
   its keep, that becomes the next ADR — with the isolation/watchability costs paid
   deliberately rather than by accident.
