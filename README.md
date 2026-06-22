@@ -156,6 +156,20 @@ It polls every `intervalSeconds` (default 30), never spawns more than `maxConcur
 listen: { label: "agent:ready", intervalSeconds: 30, maxConcurrent: 3 }
 ```
 
+On an interactive terminal, `listen` renders a **live dashboard** ([OpenTUI](https://opentui.com)) with three columns — **queued** / **in progress** / **done** — plus a detail pane showing the current issue's provisioning step and captured setup output. Newly-pulled-in issues flash `NEW`; finished ones (their `agent:wip` label gone) move to **done**. Press `q` to quit (agents keep running in their herdr panes). Piped/non-TTY, or with `--plain`, it falls back to line logs.
+
+```
+┌ githog listen ──── orderservice · trigger agent:ready · every 30s · 2/3 active ┐
+│ QUEUED (1)          IN PROGRESS (2)            DONE (2)                         │
+│  · #42 tax bug NEW   ⟳ #34 import gate worktree  ✓ #29 payee refactor          │
+│                      ▸ #37 webhook retries       ✓ #31 seed cleanup            │
+├ detail · #34 ───────────────────────────────────────────────────────────────  │
+│  ⟳ provisioning · worktree                                                     │
+│  > pnpm --filter @app/server db:migrate                                        │
+│  [✓] migrations applied successfully                                           │
+└ q quit · agents run in their own herdr worktree panes ───────────────────────  ┘
+```
+
 Detection is **polling** (a local CLI can't receive GitHub webhooks), which needs no infra and works behind NAT. Since claiming is a label swap, there's a tiny race window if you run `listen` on two machines against one repo — fine for a single dev box.
 
 ### `githog kill`

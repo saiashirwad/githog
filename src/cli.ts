@@ -4,6 +4,8 @@ import { Console, Effect } from "effect";
 import { loadConfig } from "./config.ts";
 import { launchAgent } from "./herdr.ts";
 import { currentRepoSlug, parseIssueArg, resolveIssue, type IssueRef } from "./issues.ts";
+import { consoleReporter } from "./dashboard/reporter.ts";
+import { runListenTui } from "./dashboard/run.tsx";
 import { listen } from "./listen.ts";
 import { killBranch } from "./teardown.ts";
 import { markStarted } from "./tracking.ts";
@@ -127,7 +129,7 @@ const listenCommand = Effect.fn("githog/cli/listen")(function* () {
     return yield* fail("[githog] not inside a herdr pane (HERDR_ENV != 1) — run listen from a herdr terminal.");
   }
   const config = yield* loadConfig(process.cwd());
-  yield* listen(config);
+  yield* listen(config, consoleReporter);
 });
 
 // --- `githog kill <branch>...` — tear a worktree + branch + herdr surface down -
@@ -156,26 +158,33 @@ usage:
   githog kill <branch-or-issue>...       (remove worktree + branch + herdr surface)
                                          (issue commands run inside a herdr pane)`;
 
-const refs = issueRefs();
-const program =
-  process.argv[2] === "setup"
-    ? setupCommand()
-    : process.argv[2] === "listen"
-      ? listenCommand()
-      : process.argv[2] === "kill"
-        ? killCommand()
-        : refs.length > 0
-          ? implementIssuesCommand(refs)
-          : fail(USAGE);
+// `listen` renders the live TUI dashboard on an interactive terminal (OpenTUI
+// owns the screen and runs the Effect loop forked inside it). Piped/non-TTY, or
+// with --plain, it falls back to the line-logging path below.
+if (process.argv[2] === "listen" && process.stdout.isTTY && !hasFlag("plain")) {
+  await runListenTui();
+} else {
+  const refs = issueRefs();
+  const program =
+    process.argv[2] === "setup"
+      ? setupCommand()
+      : process.argv[2] === "listen"
+        ? listenCommand()
+        : process.argv[2] === "kill"
+          ? killCommand()
+          : refs.length > 0
+            ? implementIssuesCommand(refs)
+            : fail(USAGE);
 
-program.pipe(
-  Effect.catchTags({
-    ConfigNotFound: (error) =>
-      fail(`[githog] ${error.detail}\n  Add a githog.config.ts at your repo root: export default defineConfig({ ... })`),
-    ConfigInvalid: (error) => fail(`[githog] invalid config at ${error.path}: ${error.reason}`),
-    ServiceUnavailable: (error) =>
-      fail(`[githog] service '${error.name}' (${error.host}:${error.port}) ${error.detail}`),
-  }),
-  Effect.provide(BunServices.layer),
-  BunRuntime.runMain,
-);
+  program.pipe(
+    Effect.catchTags({
+      ConfigNotFound: (error) =>
+        fail(`[githog] ${error.detail}\n  Add a githog.config.ts at your repo root: export default defineConfig({ ... })`),
+      ConfigInvalid: (error) => fail(`[githog] invalid config at ${error.path}: ${error.reason}`),
+      ServiceUnavailable: (error) =>
+        fail(`[githog] service '${error.name}' (${error.host}:${error.port}) ${error.detail}`),
+    }),
+    Effect.provide(BunServices.layer),
+    BunRuntime.runMain,
+  );
+}

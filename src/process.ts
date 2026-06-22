@@ -1,6 +1,14 @@
-import { Console, Effect, Schedule } from "effect";
+import { Console, Context, Effect, Schedule, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import * as net from "node:net";
+
+// When true (provided under the TUI scope), runExit/run CAPTURE subprocess output
+// and re-emit it line-by-line via Console.log — so a custom Console can route it
+// into the dashboard instead of letting it scribble over the rendered UI. Default
+// false: subprocesses inherit stdio exactly as before (the plain CLI path).
+export const OutputCapture = Context.Reference<boolean>("githog/OutputCapture", {
+  defaultValue: () => false,
+});
 
 // Subprocess + probe primitives, ported from worktree-setup.ts to Effect 4. The
 // v3 `Command.make(...).pipe(Command.string)` builder became `ChildProcess.make`
@@ -21,7 +29,9 @@ const makeOptions = (options: RunOptions | undefined) => ({
   ...(options?.env === undefined ? {} : { env: { ...process.env, ...options.env } }),
 });
 
-// Run a subprocess inheriting our stdio and return its exit code.
+// Run a subprocess and return its exit code. Inherits stdio by default; under the
+// TUI scope (OutputCapture = true) it pipes stdout+stderr and re-emits each line
+// via Console.log so the dashboard can capture it.
 export const runExit = Effect.fn("githog/run-exit")(function* (
   command: string,
   args: ReadonlyArray<string>,
@@ -29,6 +39,22 @@ export const runExit = Effect.fn("githog/run-exit")(function* (
 ) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   yield* Console.log(`  $ ${command} ${args.join(" ")}`);
+
+  if (yield* OutputCapture) {
+    return yield* Effect.scoped(
+      Effect.gen(function* () {
+        const handle = yield* spawner.spawn(
+          ChildProcess.make(command, args, { ...makeOptions(options), stdout: "pipe", stderr: "pipe" }),
+        );
+        const drain = Stream.runForEach(Stream.splitLines(Stream.decodeText(handle.all)), (line) =>
+          Console.log(line),
+        );
+        const [, code] = yield* Effect.all([drain, handle.exitCode], { concurrency: "unbounded" });
+        return Number(code);
+      }),
+    ).pipe(Effect.orDie);
+  }
+
   const cmd = ChildProcess.make(command, args, {
     ...makeOptions(options),
     stdin: "inherit",
