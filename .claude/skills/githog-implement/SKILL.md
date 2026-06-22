@@ -1,32 +1,40 @@
 ---
 name: githog-implement
-description: githog agent-loop iteration: implement the next task from the task list
+description: githog agent-loop iteration: implement the next vertical slice from the task list
+disable-model-invocation: true
 ---
 
 You are running ONE iteration of githog's **agent loop** for a GitHub issue
-(URL given as the argument). Every iteration starts with a CLEAN context, so the
-on-disk `TASKS.md` is your only memory of what is already done.
+(URL given as the argument). The loop has **amnesia**: every iteration starts from a
+CLEAN context, so the on-disk `TASKS.md` is your only memory of what is
+already done. Each task there is a **vertical slice** whose indented `- [ ]` lines
+are its acceptance criteria.
 
-Do exactly one task, then stop:
+Do exactly one slice, then stop:
 
-1. Read `TASKS.md`. Pick the **first unchecked** `- [ ]` task.
-2. Implement ONLY that task. Keep the change small and focused.
-3. Run the relevant checks (typecheck + the tests touching your change). Fix what
-   you broke before continuing.
-4. Commit your work with a message describing the task.
-5. Mark the task done — change its `- [ ]` to `- [x]` in `TASKS.md`.
-   Do NOT commit `TASKS.md` (it is git-ignored loop scaffolding); just save it.
+1. Read `TASKS.md`. Pick the **first task with unchecked acceptance criteria**.
+   Read `CONTEXT.md` and any ADRs under `docs/adr/` touching this area first, so your task titles, code, and test names use the project's own vocabulary rather than invented synonyms.
+2. Implement ONLY that slice — keep it small and focused. Where the slice is testable,
+   work test-first: write ONE failing test that pins the behavior, then the minimal code
+   to make it pass (a tracer bullet). Don't write the whole suite up front.
+3. Verify against the slice's acceptance criteria: run typecheck + the tests covering
+   your change, and confirm each criterion actually holds. If a check fails and the cause
+   isn't obvious, run `/diagnose` rather than guessing. Don't continue while red.
+4. Commit your work with a message describing the slice.
+5. Tick every acceptance criterion you satisfied (`- [ ]` → `- [x]`), and the task
+   itself once all its criteria are checked. Do NOT commit `TASKS.md` (git-ignored
+   scaffolding); just save it.
 
-Then decide how to end THIS iteration:
+Then end THIS iteration:
 
-- If every task is now checked AND the issue is fully satisfied, run the full
-  test suite once; if it passes, emit the completion sentinel exactly:
-  `<promise>COMPLETE</promise>`
-- If you hit a decision you cannot make on your own (ambiguous spec, missing
-  credential, a destructive or irreversible choice), emit
+- If every task and criterion is now checked, run `/code-review` on the diff and address
+  what it surfaces, then run the full test suite once. ONLY if it passes, emit the
+  completion sentinel exactly: `<promise>COMPLETE</promise>`
+- If you hit a decision you cannot make on your own (ambiguous spec, missing credential,
+  a destructive or irreversible choice), emit
   `<blocked>your question here</blocked>`
   and stop — do not guess.
-- Otherwise just stop; githog will start the next iteration with a fresh context.
+- Otherwise just stop; githog starts the next iteration with a fresh context.
 
-Do NOT try to finish multiple tasks in one iteration — one task per pass keeps the
-loop's context clean.
+One slice per iteration — resist finishing the next task, even a tempting small one. The
+clean context next iteration is what keeps each slice sharp.

@@ -10,72 +10,101 @@ import type { LoopPromptContext } from "./types.ts";
 // The task-file name and sentinel tokens are baked in from the resolved config so
 // a hand-run skill and a headless run behave identically.
 
+// These skills are only ever fired by githog (the loop invokes them by name) or by
+// hand — never autonomously by the model mid-work — so they carry
+// `disable-model-invocation: true`: zero per-turn context load, still callable as
+// `/<name> <url>`. The `description` is therefore human-facing.
 const frontmatter = (name: string, description: string, body: string): string =>
-  `---\nname: ${name}\ndescription: ${description}\n---\n\n${body}\n`;
+  `---\nname: ${name}\ndescription: ${description}\ndisable-model-invocation: true\n---\n\n${body}\n`;
+
+// The on-disk task file's shape — the single source of truth shared by both skills,
+// so the plan pass that WRITES it and the iteration that READS it can never drift.
+// Each task is a **vertical slice**; its indented `- [ ]` lines are the slice's
+// **acceptance criteria** — the iteration's checkable done-test.
+const taskFormat = (loop: ResolvedLoop): string =>
+  `\`\`\`
+   # Plan: <issue title> (#<number>)
+
+   - [ ] First vertical slice — a thin end-to-end path, demoable on its own
+     - [ ] Acceptance criterion (observable, checkable)
+     - [ ] Another acceptance criterion
+   - [ ] Second vertical slice
+     - [ ] Acceptance criterion
+   \`\`\``;
+
+// One line both skills emit, so the "read the project's own words first" rule has a
+// single source of truth.
+const vocabularyNote = "Read `CONTEXT.md` and any ADRs under `docs/adr/` touching this area first, so your task titles, code, and test names use the project's own vocabulary rather than invented synonyms.";
 
 // --- skill bodies (parameterised by the resolved loop settings) -------------
 
 const planBody = (loop: ResolvedLoop): string =>
-  `You are running githog's **plan pass** for one GitHub issue. You PLAN ONLY — you
-do not implement anything in this pass.
+  `You are running githog's **plan pass** for one GitHub issue. You PLAN ONLY — write
+no production code, tests, or other files in this pass.
 
 You are given an issue URL as the argument. Steps:
 
-1. Read the issue: \`gh issue view <url>\` (and its comments if useful).
-2. Decompose it into an **atomic, vertical-slice task list** — each task small
-   enough to finish and verify in a single focused iteration, ordered so each
-   builds on the last. Prefer end-to-end slices over horizontal layers.
-3. Write the list to \`${loop.taskFile}\` at the repo root as a GitHub-style
-   checklist, one task per line:
+1. Read the issue: \`gh issue view <url>\` (and its comments if useful). ${vocabularyNote}
+2. Decompose the issue into **tracer bullets** — thin **vertical slices** that each
+   cut end-to-end through every layer they touch (schema, logic, CLI/UI, tests),
+   small enough to finish and verify in a single iteration, and ordered so each
+   builds on the last. A slice is demoable or verifiable on its own; prefer end-to-end
+   slices over horizontal layers. If a slice gets easier after a refactor, make that
+   refactor its own first slice — make the change easy, then make the easy change.
+3. Give every task **acceptance criteria**: a short checklist of observable conditions
+   that prove the slice is done. They are the iteration's done-test, so make each one
+   checkable (an agent can tell done from not-done) and together exhaustive for the
+   slice. Write the list to \`${loop.taskFile}\` at the repo root in this exact shape:
 
-   \`\`\`
-   # Plan: <issue title> (#<number>)
-
-   - [ ] First atomic task
-   - [ ] Second atomic task
-   \`\`\`
+   ${taskFormat(loop)}
 
 4. Do NOT commit \`${loop.taskFile}\` — githog git-ignores it; it is loop scaffolding,
    not part of the change. Just leave it written on disk.
 
-Do NOT write production code, tests, or any other file in this pass. If the issue
-is too ambiguous to decompose without a decision only a human can make, emit
-\`<${loop.sentinels.blockedTag}>your question here</${loop.sentinels.blockedTag}>\` and stop.`;
+If the issue is too ambiguous to decompose without a decision only a human can make,
+emit \`<${loop.sentinels.blockedTag}>your question here</${loop.sentinels.blockedTag}>\` and stop.`;
 
 const implementBody = (loop: ResolvedLoop): string =>
   `You are running ONE iteration of githog's **agent loop** for a GitHub issue
-(URL given as the argument). Every iteration starts with a CLEAN context, so the
-on-disk \`${loop.taskFile}\` is your only memory of what is already done.
+(URL given as the argument). The loop has **amnesia**: every iteration starts from a
+CLEAN context, so the on-disk \`${loop.taskFile}\` is your only memory of what is
+already done. Each task there is a **vertical slice** whose indented \`- [ ]\` lines
+are its acceptance criteria.
 
-Do exactly one task, then stop:
+Do exactly one slice, then stop:
 
-1. Read \`${loop.taskFile}\`. Pick the **first unchecked** \`- [ ]\` task.
-2. Implement ONLY that task. Keep the change small and focused.
-3. Run the relevant checks (typecheck + the tests touching your change). Fix what
-   you broke before continuing.
-4. Commit your work with a message describing the task.
-5. Mark the task done — change its \`- [ ]\` to \`- [x]\` in \`${loop.taskFile}\`.
-   Do NOT commit \`${loop.taskFile}\` (it is git-ignored loop scaffolding); just save it.
+1. Read \`${loop.taskFile}\`. Pick the **first task with unchecked acceptance criteria**.
+   ${vocabularyNote}
+2. Implement ONLY that slice — keep it small and focused. Where the slice is testable,
+   work test-first: write ONE failing test that pins the behavior, then the minimal code
+   to make it pass (a tracer bullet). Don't write the whole suite up front.
+3. Verify against the slice's acceptance criteria: run typecheck + the tests covering
+   your change, and confirm each criterion actually holds. If a check fails and the cause
+   isn't obvious, run \`/diagnose\` rather than guessing. Don't continue while red.
+4. Commit your work with a message describing the slice.
+5. Tick every acceptance criterion you satisfied (\`- [ ]\` → \`- [x]\`), and the task
+   itself once all its criteria are checked. Do NOT commit \`${loop.taskFile}\` (git-ignored
+   scaffolding); just save it.
 
-Then decide how to end THIS iteration:
+Then end THIS iteration:
 
-- If every task is now checked AND the issue is fully satisfied, run the full
-  test suite once; if it passes, emit the completion sentinel exactly:
-  \`${loop.sentinels.completion}\`
-- If you hit a decision you cannot make on your own (ambiguous spec, missing
-  credential, a destructive or irreversible choice), emit
+- If every task and criterion is now checked, run \`/code-review\` on the diff and address
+  what it surfaces, then run the full test suite once. ONLY if it passes, emit the
+  completion sentinel exactly: \`${loop.sentinels.completion}\`
+- If you hit a decision you cannot make on your own (ambiguous spec, missing credential,
+  a destructive or irreversible choice), emit
   \`<${loop.sentinels.blockedTag}>your question here</${loop.sentinels.blockedTag}>\`
   and stop — do not guess.
-- Otherwise just stop; githog will start the next iteration with a fresh context.
+- Otherwise just stop; githog starts the next iteration with a fresh context.
 
-Do NOT try to finish multiple tasks in one iteration — one task per pass keeps the
-loop's context clean.`;
+One slice per iteration — resist finishing the next task, even a tempting small one. The
+clean context next iteration is what keeps each slice sharp.`;
 
 const planDoc = (loop: ResolvedLoop, name: string): string =>
-  frontmatter(name, "githog plan pass: decompose an issue into an atomic task list (plan only)", planBody(loop));
+  frontmatter(name, "githog plan pass: decompose an issue into a vertical-slice task list with acceptance criteria (plan only)", planBody(loop));
 
 const implementDoc = (loop: ResolvedLoop, name: string): string =>
-  frontmatter(name, "githog agent-loop iteration: implement the next task from the task list", implementBody(loop));
+  frontmatter(name, "githog agent-loop iteration: implement the next vertical slice from the task list", implementBody(loop));
 
 const skillPath = (path: Path.Path, targetDir: string, name: string): string =>
   path.join(targetDir, ".claude", "skills", name, "SKILL.md");
