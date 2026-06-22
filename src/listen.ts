@@ -1,15 +1,20 @@
 import { Duration, Effect, Ref, Schedule, Schema } from "effect";
 import { launchAgent } from "./herdr.ts";
 import { capture, runExit } from "./process.ts";
-import { claimReady, markStarted } from "./tracking.ts";
+import { claimReady, markBlocked, markStarted } from "./tracking.ts";
 import { resolveRepo, setupWorktree } from "./worktree.ts";
 import type { Reporter } from "./dashboard/reporter.ts";
 import type { GithogConfig, WorkItem } from "./types.ts";
 
 const DEFAULT_READY_LABEL = "agent:ready";
 const DEFAULT_WIP_LABEL = "agent:wip";
+const DEFAULT_BLOCKED_LABEL = "agent:blocked";
 const DEFAULT_INTERVAL_SECONDS = 30;
 const DEFAULT_MAX_CONCURRENT = 3;
+// How long an issue may sit in `wip` with no live loop process before the daemon
+// reclaims its slot. Comfortably longer than worktree setup (install + vendoring),
+// so an issue still provisioning — wip-but-no-loop-yet — is never reclaimed.
+const ORPHAN_GRACE_MS = 5 * 60 * 1000;
 
 // gh issue list rows are decoded, never asserted.
 const IssueRows = Schema.Array(Schema.Struct({ number: Schema.Number, url: Schema.String, title: Schema.String }));
@@ -42,6 +47,20 @@ const branchExists = Effect.fn("githog/listen/branch-exists")(function* (primary
   );
 });
 
+// Is a `githog loop` still running for this issue? The loop is one long-lived
+// `bun … loop <issue-url>` process that outlives each `claude -p` iteration, so its
+// presence means alive, its absence means the loop died. We match `/issues/<n>` in
+// the process list (the `(?!\d)` keeps #3 from matching #30). Single-box assumption,
+// which is what `listen` is for. On any uncertainty (ps unavailable) we assume ALIVE
+// so a flaky check can never reclaim a healthy loop.
+const loopAlive = Effect.fn("githog/listen/loop-alive")(function* (number: number) {
+  const out = yield* capture("ps", ["-A", "-ww", "-o", "command="]).pipe(
+    Effect.catchCause(() => Effect.succeed("")),
+  );
+  if (out === "") return true;
+  return new RegExp(`/issues/${number}(?!\\d)`).test(out);
+});
+
 // Poll for `ready` issues forever, claiming up to the concurrency cap each tick
 // and running the same provision→launch→mark flow as implement-issues. Per-issue
 // and per-tick failures are caught so the daemon never dies. `reporter` decides
@@ -54,6 +73,7 @@ export const listen = Effect.fn("githog/listen")(function* (config: GithogConfig
   const repo = yield* resolveRepo();
   const readyLabel = config.listen?.label ?? DEFAULT_READY_LABEL;
   const wipLabel = config.issues?.label ?? DEFAULT_WIP_LABEL;
+  const blockedLabel = config.issues?.blockedLabel ?? DEFAULT_BLOCKED_LABEL;
   const intervalSeconds = config.listen?.intervalSeconds ?? DEFAULT_INTERVAL_SECONDS;
   const maxConcurrent = config.listen?.maxConcurrent ?? DEFAULT_MAX_CONCURRENT;
   const branchOf = config.issues?.branch ?? ((item: WorkItem) => String(item.number));
@@ -63,6 +83,8 @@ export const listen = Effect.fn("githog/listen")(function* (config: GithogConfig
   const seen = yield* Ref.make<ReadonlySet<number>>(new Set());
   const prevQueued = yield* Ref.make<ReadonlySet<number>>(new Set());
   const prevWip = yield* Ref.make<ReadonlySet<number>>(new Set());
+  // issue number -> first tick (ms) we saw it `wip` with no live loop process.
+  const firstDead = yield* Ref.make<ReadonlyMap<number, number>>(new Map());
 
   yield* reporter.header({ repoName: repo.repoName, readyLabel, intervalSeconds, maxConcurrent });
 
@@ -97,7 +119,37 @@ export const listen = Effect.fn("githog/listen")(function* (config: GithogConfig
     yield* Ref.set(prevQueued, new Set(ready.map((row) => row.number)));
     yield* Ref.set(prevWip, wipNums);
 
-    let slots = Math.max(0, maxConcurrent - wip.length);
+    // Reclaim orphaned slots: an issue stuck in `wip` whose loop process has been
+    // gone past the grace window (crashed, machine slept, pane killed) would hold a
+    // slot forever, since the gauge counts `wip`. Move it to `blocked` so the slot
+    // frees and a human can see it. Grace > setup time, so we never reclaim an issue
+    // that's merely still provisioning (wip but no loop yet).
+    const now = Date.now();
+    const dead = new Map(yield* Ref.get(firstDead));
+    let reclaimed = 0;
+    for (const w of wip) {
+      if (yield* loopAlive(w.number)) {
+        dead.delete(w.number);
+        continue;
+      }
+      const since = dead.get(w.number);
+      if (since === undefined) {
+        dead.set(w.number, now);
+      } else if (now - since >= ORPHAN_GRACE_MS) {
+        yield* markBlocked(
+          wipLabel,
+          blockedLabel,
+          w.number,
+          `🛑 githog: the loop for #${w.number} is no longer running (crashed or interrupted) and it sat in \`${wipLabel}\` past ${Math.round(ORPHAN_GRACE_MS / 60000)}m — reclaimed by the daemon to free a slot. Re-label \`${readyLabel}\` to retry it.`,
+        );
+        dead.delete(w.number);
+        reclaimed += 1;
+      }
+    }
+    for (const n of [...dead.keys()]) if (!wipNums.has(n)) dead.delete(n);
+    yield* Ref.set(firstDead, dead);
+
+    let slots = Math.max(0, maxConcurrent - (wip.length - reclaimed));
     if (slots === 0) return;
     const alreadySeen = yield* Ref.get(seen);
     for (const item of ready) {
