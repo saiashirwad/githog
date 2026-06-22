@@ -13,9 +13,9 @@ githog kill my-feature                   # remove the worktree, branch, and agen
 
 ## Why
 
-Multiple worktrees of one repo usually collide: they share a database, they fight over dev ports (`3000`, `5173`, …), and each needs its `.env` set up by hand. githog carves out a per-worktree slice — a database named for the branch, the next free ports, a copied-and-rewritten `.env` — so any number of worktrees (and the agents working in them) run side by side without stepping on each other.
+Multiple worktrees of one repo collide: they share a database, fight over dev ports (`3000`, `5173`), and each needs its `.env` set up by hand. githog gives each worktree its own database named for the branch, the next free ports, and a copied-and-rewritten `.env`, so any number of worktrees and their agents run at once.
 
-The two halves compose: `implement-issues` calls the same worktree provisioning in-process (one Effect graph, no nested shell-outs) and then attaches an agent to each resolved worktree.
+`implement-issues` reuses the same provisioning in-process (one Effect graph, no nested shell-outs), then attaches an agent to each resolved worktree.
 
 ## Install
 
