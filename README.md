@@ -36,13 +36,13 @@ The bin is a symlink to the source, so `git pull` updates it.
 
 ## Configure
 
-Each project that uses githog has a `githog.config.ts` at its repo root. See [`githog.config.example.ts`](./githog.config.example.ts) for a fully-worked, copy-pasteable example.
+Each project that uses githog has a `githog.config.ts` at its repo root. See [`githog.config.example.ts`](./githog.config.example.ts) for a complete example.
 
 ```ts
 import { defineConfig } from "githog";
 
 export default defineConfig({
-  // env keys made unique per worktree (scans sibling worktrees, takes the lowest free value ≥ base)
+  // env keys made unique per worktree: lowest free value ≥ base across sibling worktrees
   ports: [
     { key: "PORT", base: 3000 },
     { key: "CLIENT_PORT", base: 5173 },
@@ -50,14 +50,14 @@ export default defineConfig({
 
   env: {
     source: ".env",          // copied from the primary checkout (default ".env")
-    fallback: ".env.example", // used only if source is missing
-    // per-worktree derived keys — `slug` is the branch name slugified, `env` reads the source .env
+    fallback: ".env.example", // used if source is missing
+    // per-worktree key overrides; `slug` is the slugified branch, `env` reads the source .env
     derive: ({ slug, env }) => ({
       DATABASE_URL: withDbName(env("DATABASE_URL") ?? DEFAULT_DB_URL, `myapp_${slug}`),
     }),
   },
 
-  // TCP dependencies probed before setup; started via `start` if down
+  // TCP dependencies probed before setup; `start` runs if unreachable
   services: [
     { name: "postgres", host: "localhost", port: 5432, start: ["docker", "compose", "up", "-d", "db"] },
   ],
@@ -69,8 +69,8 @@ export default defineConfig({
     { label: "seed", run: ["bun", "run", "db:seed"], injectEnv: ["DATABASE_URL"], fatal: false },
   ],
 
-  // the Ralph loop: githog plans the issue, then drives the agent headlessly
-  // with a clean context each iteration until it's done (ADR-0001)
+  // the Ralph loop: githog plans the issue, then runs the agent with a
+  // fresh context each iteration until done (ADR-0001)
   agent: {
     command: ["claude"],
     loop: { maxIterations: 25 },
