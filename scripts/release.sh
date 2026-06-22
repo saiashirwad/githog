@@ -36,7 +36,9 @@ bun test
 
 if [ -n "$dry" ]; then
   step "publish (dry run)"
-  npm publish --dry-run
+  # The real flow bumps the version first; here we pack the *current* version, so
+  # npm's "cannot publish over an existing version" is expected and not a failure.
+  npm publish --dry-run || echo "  (publish-over-existing-version warning is expected in a dry run)"
   printf '\n\033[1;32m✓ dry run clean — would bump (%s), publish, and push\033[0m\n' "$bump"
   exit 0
 fi
