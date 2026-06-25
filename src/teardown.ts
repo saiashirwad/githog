@@ -1,4 +1,5 @@
 import { Console, Effect, Option } from "effect";
+import { emit, teardownEvents } from "./events.ts";
 import { worktreePathForBranch } from "./git/porcelain.ts";
 import { Herdr } from "./herdr/service.ts";
 import { capture, runExit } from "./process.ts";
@@ -97,7 +98,7 @@ export const killBranch = Effect.fn("homestead/kill-branch")(function* (
   keepRemote = false,
   config?: HomesteadConfig,
 ) {
-  yield* Console.log(`\n▸ Killing '${branch}'`);
+  yield* emit(config?.onEvent, teardownEvents("kill", branch, "start"));
 
   // Read tracking state BEFORE teardownWorktree: markStopped (called inside it)
   // deletes the file. Only the issue flow writes tracking state; PR review
@@ -122,7 +123,7 @@ export const killBranch = Effect.fn("homestead/kill-branch")(function* (
   yield* deleteRemoteBranch(primaryRoot, branch, tracked, keepRemote);
 
   yield* runAfterTeardown(config?.afterTeardown, ctx, "kill");
-  yield* Console.log(`  ✓ killed '${branch}'`);
+  yield* emit(config?.onEvent, teardownEvents("kill", branch, "done"));
 });
 
 export const closeBranch = Effect.fn("homestead/close-branch")(function* (
@@ -132,7 +133,7 @@ export const closeBranch = Effect.fn("homestead/close-branch")(function* (
   reviewLabel: string,
   config?: HomesteadConfig,
 ) {
-  yield* Console.log(`\n▸ Closing '${branch}'`);
+  yield* emit(config?.onEvent, teardownEvents("close", branch, "start"));
 
   const tracked = Option.isSome(yield* loadTrackingState(repoName, branch));
   const ctx = makeContext({ repoName, slug: branch, branch, worktreeDir: "" });
@@ -142,7 +143,7 @@ export const closeBranch = Effect.fn("homestead/close-branch")(function* (
   yield* teardownWorktree(primaryRoot, branch, markFinished(repoName, branch, reviewLabel, config?.issues));
 
   yield* runAfterTeardown(config?.afterTeardown, ctx, "close", reviewLabel);
-  yield* Console.log(`  ✓ closed '${branch}' (branch kept, issue → ${reviewLabel})`);
+  yield* emit(config?.onEvent, teardownEvents("close", branch, "done", reviewLabel));
 });
 
 export const completeBranch = Effect.fn("homestead/complete-branch")(function* (
@@ -152,7 +153,7 @@ export const completeBranch = Effect.fn("homestead/complete-branch")(function* (
   keepRemote = false,
   config?: HomesteadConfig,
 ) {
-  yield* Console.log(`\n▸ Completing '${branch}'`);
+  yield* emit(config?.onEvent, teardownEvents("complete", branch, "start"));
 
   // Read tracking state BEFORE teardownWorktree: markCompleted (called inside it)
   // deletes the file. Only the issue flow writes tracking state; PR review never
@@ -177,5 +178,5 @@ export const completeBranch = Effect.fn("homestead/complete-branch")(function* (
   yield* deleteRemoteBranch(primaryRoot, branch, tracked, keepRemote);
 
   yield* runAfterTeardown(config?.afterTeardown, ctx, "complete");
-  yield* Console.log(`  ✓ completed '${branch}' (issue closed, branch removed)`);
+  yield* emit(config?.onEvent, teardownEvents("complete", branch, "done"));
 });

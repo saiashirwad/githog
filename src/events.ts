@@ -30,6 +30,19 @@ export type HomesteadEvent =
 
 const formatCommand = (command: ReadonlyArray<string>): string => command.join(" ");
 
+export const teardownEvents = (
+  verb: "kill" | "close" | "complete",
+  branch: string,
+  phase: "start" | "done",
+  reviewLabel?: string,
+): Extract<HomesteadEvent, { type: "teardown" }> => ({
+  type: "teardown",
+  verb,
+  branch,
+  phase,
+  ...(reviewLabel !== undefined ? { reviewLabel } : {}),
+});
+
 export const formatEvent = (e: HomesteadEvent): string | undefined => {
   switch (e.type) {
     case "worktree.creating": {

@@ -1,5 +1,6 @@
 import { Console, Effect, FileSystem, Path } from "effect";
 import * as os from "node:os";
+import { emit } from "../events.ts";
 import { parseWorktreePorcelain } from "../git/porcelain.ts";
 import { nextFreePort, readEnvVar, slugify } from "../text.ts";
 import { capture, run } from "../process.ts";
@@ -109,8 +110,12 @@ export const resolveTarget = Effect.fn("homestead/resolve-target")(function* (
 
     const exists = yield* refExists(repo.primaryRoot, `refs/heads/${branch}`);
     const from = options.from ?? (exists ? undefined : yield* resolveDefaultBaseRef(repo.primaryRoot));
-    const fromSuffix = from === undefined ? "" : ` (from ${from})`;
-    yield* Console.log(`\n▸ Creating worktree '${branch}' at ${targetDir}${fromSuffix}`);
+    yield* emit(config.onEvent, {
+      type: "worktree.creating",
+      branch,
+      targetDir,
+      ...(from !== undefined ? { from } : {}),
+    });
     if (!dryRun) {
       const alreadyThere = yield* fs.exists(targetDir);
       if (alreadyThere) {
