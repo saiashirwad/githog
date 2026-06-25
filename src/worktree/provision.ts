@@ -1,5 +1,14 @@
 import { Console, Effect, FileSystem } from "effect";
 import { makeContext, type HomesteadContext } from "../context.ts";
+import { ConfigInvalid, ServiceUnavailable } from "../errors.ts";
+import { applyTemplate, setEnvVar } from "../text.ts";
+import { pollSchedule, probeTcp, run, runExit } from "../process.ts";
+import { DEFAULT_SERVICE_TIMEOUT_MS } from "../defaults.ts";
+import {
+  type HomesteadConfig,
+  type Plan,
+  type SetupStep,
+} from "../types.ts";
 import type { Repo } from "./repo.ts";
 
 export const resolveSetup = (
