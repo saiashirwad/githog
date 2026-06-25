@@ -12,6 +12,7 @@ import type {
   SetupStep,
 } from "./config-schema.ts";
 import type { PrView } from "./pr/resolve.ts";
+import type { WorkItem } from "./work-item.ts";
 import type { HomesteadContext } from "./context.ts";
 
 export type {
