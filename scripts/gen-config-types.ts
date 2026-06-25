@@ -6,8 +6,8 @@
 //
 // Single source of truth: we resolve HomesteadConfig via the TypeScript checker
 // and print each property structurally, so schema/type changes flow through on
-// the next release. The ONE member that references effect (`afterSetup`, which
-// returns an Effect over HomesteadServices) is loosened to an effect-free shape.
+// the next release. Members that reference effect (lifecycle hooks, onEvent)
+// are loosened to effect-free shapes consumers can implement synchronously.
 //
 //   bun run scripts/gen-config-types.ts            # -> src/homestead.config.types.d.ts
 //   bun run scripts/gen-config-types.ts --check    # fail if out of date (CI/release)
@@ -20,16 +20,25 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
 const typesEntry = join(root, "src", "types.ts");
+const eventsEntry = join(root, "src", "events.ts");
+const prResolveEntry = join(root, "src", "pr", "resolve.ts");
 const outPath = join(root, "src", "generated", "homestead.config.types.d.ts");
 const pkgVersion = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version as string;
 
-// afterSetup is the only member whose type touches `effect` (Effect + the
-// HomesteadServices requirement). Consumers rarely use it and a bare .d.ts has
-// no `effect` to import, so we loosen it. Everything else is structural and
-// effect-free, so the checker's printout is safe to ship verbatim.
-const AFTER_SETUP = "afterSetup?: ((ctx: WorktreeContext & { readonly plan: Plan }) => unknown) | undefined";
+// Lifecycle hooks and onEvent touch `effect` (Effect + HomesteadServices). Consumers
+// rarely need the full runtime type and a bare .d.ts has no `effect` to import,
+// so we loosen them to unknown-returning callbacks.
+const EFFECT_FREE_HOOKS: Record<string, string> = {
+  afterSetup: "afterSetup?: ((ctx: WorktreeContext & { readonly plan: Plan }) => unknown) | undefined",
+  afterLaunch: "afterLaunch?: ((ctx: HomesteadContext & { readonly paneId: string; }) => unknown) | undefined",
+  beforeTeardown:
+    'beforeTeardown?: ((ctx: HomesteadContext & { readonly verb: "kill" | "close" | "complete"; readonly tracked: boolean; }) => unknown) | undefined',
+  afterTeardown:
+    'afterTeardown?: ((ctx: HomesteadContext & { readonly verb: "kill" | "close" | "complete"; readonly reviewLabel?: string; }) => unknown) | undefined',
+  onEvent: "onEvent?: ((e: HomesteadEvent) => unknown) | undefined",
+};
 
-const program = ts.createProgram([typesEntry], {
+const program = ts.createProgram([typesEntry, eventsEntry, prResolveEntry], {
   strict: true,
   moduleResolution: ts.ModuleResolutionKind.Bundler,
   allowImportingTsExtensions: true,
@@ -37,32 +46,33 @@ const program = ts.createProgram([typesEntry], {
   skipLibCheck: true,
 });
 const checker = program.getTypeChecker();
-const source = program.getSourceFile(typesEntry);
-if (!source) throw new Error(`cannot load ${typesEntry}`);
-
-const exportsOfFile = checker.getExportsOfModule(checker.getSymbolAtLocation(source)!);
-const findExport = (name: string) => {
-  const sym = exportsOfFile.find((s) => s.name === name);
-  if (!sym) throw new Error(`expected export "${name}" in src/types.ts`);
-  return sym;
-};
 
 const FLAGS =
   ts.TypeFormatFlags.NoTruncation |
   ts.TypeFormatFlags.UseFullyQualifiedType |
   ts.TypeFormatFlags.WriteArrayAsGenericType;
 
+const findExport = (entry: string, name: string) => {
+  const source = program.getSourceFile(entry);
+  if (!source) throw new Error(`cannot load ${entry}`);
+  const sym = checker.getExportsOfModule(checker.getSymbolAtLocation(source)!).find((s) => s.name === name);
+  if (!sym) throw new Error(`expected export "${name}" in ${entry}`);
+  return sym;
+};
+
 // Print one exported type as a structural interface body. We expand the type's
 // own properties (not nested named types — those stay inlined, which is fine
 // for a generated artifact) and never recurse into effect.
-const printInterface = (name: string, opts: { afterSetup?: boolean } = {}): string => {
-  const sym = findExport(name);
+const printInterface = (name: string, opts: { effectFreeHooks?: boolean } = {}): string => {
+  const sym = findExport(typesEntry, name);
   const type = checker.getDeclaredTypeOfSymbol(sym);
   const props = checker.getPropertiesOfType(type);
+  const source = program.getSourceFile(typesEntry)!;
   const lines: string[] = [];
   for (const prop of props) {
-    if (opts.afterSetup && prop.name === "afterSetup") {
-      lines.push(`  readonly ${AFTER_SETUP};`);
+    const override = opts.effectFreeHooks ? EFFECT_FREE_HOOKS[prop.name] : undefined;
+    if (override !== undefined) {
+      lines.push(`  readonly ${override};`);
       continue;
     }
     const decl = prop.valueDeclaration ?? prop.declarations?.[0];
@@ -74,13 +84,30 @@ const printInterface = (name: string, opts: { afterSetup?: boolean } = {}): stri
   return `export interface ${name} {\n${lines.join("\n")}\n}`;
 };
 
+const printExportedTypeAlias = (entry: string, name: string): string => {
+  const sym = findExport(entry, name);
+  const decl = sym.declarations?.[0];
+  const source = program.getSourceFile(entry)!;
+  if (decl !== undefined && ts.isTypeAliasDeclaration(decl)) {
+    const printer = ts.createPrinter({ removeComments: true });
+    const printed = printer.printNode(ts.EmitHint.Unspecified, decl.type, source);
+    return `export type ${name} = ${printed};`;
+  }
+  const type = checker.getDeclaredTypeOfSymbol(sym);
+  const printed = checker.typeToString(type, decl, FLAGS);
+  return `export type ${name} = ${printed};`;
+};
+
 // The named types reachable from HomesteadConfig that consumers may reference,
 // plus the context types used by hook signatures. All are effect-free.
+// Order matters: WorkItem + PrView before HomesteadContext; HomesteadContext
+// before members that reference it; HomesteadEvent before HomesteadConfig.
 const NAMED = [
+  "WorkItem",
+  "HomesteadContext",
   "PortSpec",
   "ServiceSpec",
   "SetupStep",
-  "WorkItem",
   "WorktreeContext",
   "AgentPromptContext",
   "TrackingContext",
@@ -93,8 +120,11 @@ const NAMED = [
 ];
 
 const blocks = [
-  ...NAMED.map((n) => printInterface(n)),
-  printInterface("HomesteadConfig", { afterSetup: true }),
+  printInterface("WorkItem"),
+  printExportedTypeAlias(prResolveEntry, "PrView"),
+  ...NAMED.filter((n) => n !== "WorkItem").map((n) => printInterface(n)),
+  printExportedTypeAlias(eventsEntry, "HomesteadEvent"),
+  printInterface("HomesteadConfig", { effectFreeHooks: true }),
 ];
 
 const header = `// AUTO-GENERATED by homestead — do not edit.

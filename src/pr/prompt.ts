@@ -24,12 +24,18 @@ export const defaultWorkPrompt = (ctx: PrPromptContext): string =>
   `${checkInstruction(ctx.checks)}, then keep working: fix failures, address review ` +
   `feedback, and commit. Show me your plan before large changes.`;
 
+export const resolveChecks = (
+  checks: string | ((ctx: PrPromptContext) => string) | undefined,
+  ctx: PrPromptContext,
+): string | undefined =>
+  checks === undefined ? undefined : typeof checks === "function" ? checks(ctx) : checks;
+
 export const buildPrPrompt = (
   mode: "review" | "work",
   pr: PrView,
   config: HomesteadConfig,
 ): string => {
-  const ctx: PrPromptContext = { pr, checks: config.pr?.checks };
+  const ctx: PrPromptContext = { pr, checks: resolveChecks(config.pr?.checks, { pr }) };
   if (mode === "review") return (config.pr?.reviewPrompt ?? defaultReviewPrompt)(ctx);
   return (config.pr?.workPrompt ?? defaultWorkPrompt)(ctx);
 };

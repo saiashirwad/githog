@@ -10,6 +10,7 @@
 //   homestead close 2                     # finalize: tear down, keep the branch, issue → review
 //   homestead kill my-feature
 
+import { Effect } from "effect";
 import type { HomesteadConfig } from "./src/types.ts";
 
 export default {
@@ -25,6 +26,7 @@ export default {
     label: "agent:wip",
     assign: true,
     comment: true,
+    stopComment: (ctx) => `homestead: agent stopped on \`${ctx.branch}\` (${ctx.host})`,
   },
 
   // homestead boots an interactive Claude in a herdr pane per issue, waits for the
@@ -33,5 +35,11 @@ export default {
   agent: {
     command: ["claude"],
     surface: "worktree", // nest each agent under homestead's workspace in herdr
+    surfaceLabel: (ctx) => (ctx.kind === "issue" ? `issue-${ctx.item!.number}` : `pr-${ctx.pr!.number}`),
   },
+
+  afterTeardown: (ctx) =>
+    ctx.verb === "kill"
+      ? Effect.sync(() => console.log(`  (teardown: killed ${ctx.branch})`))
+      : Effect.void,
 } satisfies HomesteadConfig;

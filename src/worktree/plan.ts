@@ -1,5 +1,6 @@
 import { Console, Effect, FileSystem, Path } from "effect";
 import * as os from "node:os";
+import { emit } from "../events.ts";
 import { parseWorktreePorcelain } from "../git/porcelain.ts";
 import { nextFreePort, readEnvVar, slugify } from "../text.ts";
 import { capture, run } from "../process.ts";
@@ -7,8 +8,10 @@ import {
   DEFAULT_ENV_FALLBACK,
   DEFAULT_ENV_SOURCE,
 } from "../defaults.ts";
+import { makeContext } from "../context.ts";
 import {
   type HomesteadConfig,
+  type HomesteadContext,
   type Plan,
   type PortSpec,
   type WorktreeContext,
@@ -28,12 +31,15 @@ export const makeWorktreeContext = (
   target: Target,
   sourceContent: string,
 ): WorktreeContext => ({
-  slug: target.slug,
-  branch: target.branch,
+  ...makeContext({
+    repoName: repo.repoName,
+    slug: target.slug,
+    branch: target.branch,
+    worktreeDir: target.targetDir,
+    env: (key) => readEnvVar(sourceContent, key),
+  }),
   targetDir: target.targetDir,
   primaryRoot: repo.primaryRoot,
-  repoName: repo.repoName,
-  env: (key) => readEnvVar(sourceContent, key),
 });
 
 export const resolveTargetDir = (input: {
@@ -47,7 +53,9 @@ export const resolveTargetDir = (input: {
   const { dirFlag, config, repoName, slug, branch, path } = input;
   if (dirFlag !== undefined) return path.resolve(dirFlag);
   if (config.worktreeDir !== undefined) {
-    return path.resolve(config.worktreeDir({ repoName, slug, branch }));
+    return path.resolve(
+      config.worktreeDir(makeContext({ repoName, slug, branch, worktreeDir: "" })),
+    );
   }
   return path.join(os.homedir(), "worktrees", repoName, slug);
 };
@@ -66,15 +74,22 @@ export const collectUsedPorts = (
   return used;
 };
 
+export const resolvePortBase = (
+  base: number | ((ctx: HomesteadContext) => number),
+  ctx: HomesteadContext,
+): number => (typeof base === "function" ? base(ctx) : base);
+
 export const computePortEdits = (
   targetEnv: string,
   ports: ReadonlyArray<PortSpec>,
   used: ReadonlyMap<string, ReadonlySet<number>>,
+  ctx: HomesteadContext,
 ): ReadonlyArray<readonly [string, string]> => {
   const envEdits: Array<readonly [string, string]> = [];
   for (const spec of ports) {
     const existing = readEnvVar(targetEnv, spec.key);
-    const value = existing ?? String(nextFreePort(spec.base, used.get(spec.key) ?? new Set()));
+    const value =
+      existing ?? String(nextFreePort(resolvePortBase(spec.base, ctx), used.get(spec.key) ?? new Set()));
     envEdits.push([spec.key, value]);
   }
   return envEdits;
@@ -109,8 +124,12 @@ export const resolveTarget = Effect.fn("homestead/resolve-target")(function* (
 
     const exists = yield* refExists(repo.primaryRoot, `refs/heads/${branch}`);
     const from = options.from ?? (exists ? undefined : yield* resolveDefaultBaseRef(repo.primaryRoot));
-    const fromSuffix = from === undefined ? "" : ` (from ${from})`;
-    yield* Console.log(`\n▸ Creating worktree '${branch}' at ${targetDir}${fromSuffix}`);
+    yield* emit(config.onEvent, {
+      type: "worktree.creating",
+      branch,
+      targetDir,
+      ...(from !== undefined ? { from } : {}),
+    });
     if (!dryRun) {
       const alreadyThere = yield* fs.exists(targetDir);
       if (alreadyThere) {
@@ -180,7 +199,14 @@ export const resolvePlan = Effect.fn("homestead/resolve-plan")(function* (
   }
   const used = collectUsedPorts(siblingEnvContents, ports);
 
-  const envEdits: Array<readonly [string, string]> = [...computePortEdits(targetEnv, ports, used)];
+  const portCtx = makeContext({
+    repoName: repo.repoName,
+    slug: target.slug,
+    branch: target.branch,
+    worktreeDir: target.targetDir,
+    env: (key) => readEnvVar(sourceContent, key),
+  });
+  const envEdits: Array<readonly [string, string]> = [...computePortEdits(targetEnv, ports, used, portCtx)];
 
   // Derived keys (e.g. a per-worktree DATABASE_URL) — the config function reads
   // the SOURCE .env via ctx.env and returns the values to override.

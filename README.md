@@ -69,6 +69,170 @@ The generated types track the homestead version you ran `init` with — re-run
 
 Re-running on an existing worktree is safe — it reuses the same ports.
 
+## Configuration reference
+
+Most config fields are static values. Several accept **callbacks** that homestead resolves at the right lifecycle stage. Callbacks receive a unified **`HomesteadContext`** (plus stage-specific extras where noted).
+
+### `HomesteadContext`
+
+Every callback shares this base shape:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `repoName` | `string` | Slugified repo name |
+| `slug` | `string` | Worktree slug (often derived from branch) |
+| `branch` | `string` | Git branch name |
+| `worktreeDir` | `string` | Absolute path to the worktree |
+| `item` | `WorkItem?` | Present on issue flows (`number`, `url`, `title`) |
+| `pr` | `PrView?` | Present on PR flows |
+| `env` | `(key) => string \| undefined` | Read env vars from the worktree's `.env` source |
+
+**Extensions** used by specific callbacks:
+
+- **`WorktreeContext`** — `HomesteadContext & { targetDir, primaryRoot }` — used by `env.derive` and `afterSetup`
+- **`AgentPromptContext`** — `HomesteadContext & { args }` — used by `agent.prompt`
+- **`TrackingContext`** — `HomesteadContext & { host }` — used by `issues.comment`
+- **`SurfaceCtx`** — `HomesteadContext & { kind: "issue" \| "pr" }` — used by `agent.surfaceLabel`
+
+**Special cases:**
+
+- Inside the **`worktreeDir`** callback, `ctx.worktreeDir` is always `""` — you are defining the path, not reading it.
+- At **teardown hooks** (`beforeTeardown`, `afterTeardown`), `ctx.worktreeDir` is `""` and `ctx.env()` always returns `undefined`.
+
+### Lifecycle hooks
+
+Hooks return `Effect.Effect<void, never, HomesteadServices>` — import `Effect` from `effect` in your config when using them.
+
+| Hook | When | Extra fields |
+| --- | --- | --- |
+| `afterSetup` | After provisioning finishes (env written, setup steps run) | `{ plan: Plan }` on `WorktreeContext` |
+| `afterLaunch` | After agent pane is created and kickoff prompt typed | `{ paneId: string }` |
+| `beforeTeardown` | Before worktree removal (`kill`, `close`, `complete`) | `{ verb, tracked: boolean }` |
+| `afterTeardown` | After teardown completes | `{ verb, reviewLabel? }` — `reviewLabel` only on `close` |
+
+```ts
+import { Effect } from "effect";
+import type { HomesteadConfig } from "./generated/homestead.config.types";
+
+export default {
+  afterLaunch: (ctx) =>
+    Effect.sync(() => console.log(`Agent ready in pane ${ctx.paneId} on ${ctx.branch}`)),
+  beforeTeardown: (ctx) =>
+    ctx.tracked ? Effect.sync(() => console.log(`Tearing down tracked ${ctx.branch}`)) : Effect.void,
+  afterTeardown: (ctx) =>
+    ctx.verb === "close"
+      ? Effect.sync(() => console.log(`Moved to ${ctx.reviewLabel}`))
+      : Effect.void,
+} satisfies HomesteadConfig;
+```
+
+### `onEvent` and `HomesteadEvent`
+
+Replace homestead's default console reporter with your own handler. Omit `onEvent` to keep the built-in log lines.
+
+```ts
+import { Effect } from "effect";
+
+onEvent: (e) =>
+  Effect.sync(() => {
+    if (e.type === "agent.launched") console.log(`custom: #${e.item.number} → ${e.paneId}`);
+  }),
+```
+
+**Event union** (`HomesteadEvent`):
+
+| `type` | Payload |
+| --- | --- |
+| `"worktree.creating"` | `{ branch, targetDir, from? }` |
+| `"agent.launching"` | `{ item, command, worktreeDir }` |
+| `"agent.launched"` | `{ item, command, paneId, worktreeDir }` |
+| `"pr.launching"` | `{ pr, mode: "review" \| "work", branch }` |
+| `"pr.launched"` | `{ pr, mode, branch, paneId }` |
+| `"issues.summary"` | `{ launched, total }` |
+| `"teardown"` | `{ verb: "kill" \| "close" \| "complete", branch, phase: "start" \| "done", reviewLabel? }` |
+
+### `issues.*` callbacks
+
+All issue-tracking fields are opt-in. Omit them to never touch GitHub issues.
+
+| Field | Form | Default when enabled |
+| --- | --- | --- |
+| `branch` | `(item) => string` | *(required if using issue flow)* — no default |
+| `label` | `string \| (item) => string` | `"agent:wip"` if set as string |
+| `reviewLabel` | `string \| (item) => string` | `"agent:review"` |
+| `assign` | `boolean \| string \| (item) => string \| string[]` | `true` → `["@me"]`; `false`/omit → no assign |
+| `comment` | `boolean \| (ctx: TrackingContext) => string` | ``homestead: agent started on `{branch}` ({host}) — worktree `{worktreeDir}``` |
+| `stopComment` | `boolean \| (ctx) => string` | off by default; `true` → ``homestead: agent stopped on `{branch}` ({host})``` |
+| `reviewComment` | `boolean \| (ctx) => string` | off by default; `true` → ``homestead: `{branch}` moved to review ({host})``` |
+| `closeComment` | `boolean \| (ctx) => string` | off by default; `true` → ``homestead: `{branch}` completed ({host})``` |
+| `closeReason` | `"completed" \| "not planned" \| (ctx) => …` | `"completed"` |
+| `labelColor` | `string \| ({ label, kind }) => string` | `"1D76DB"` — `kind` is `"wip"` or `"review"` |
+
+Stop/review/close comment callbacks receive `HomesteadContext & { host: string }`.
+
+```ts
+issues: {
+  branch: (item) => String(item.number),
+  label: "agent:wip",
+  assign: true,
+  comment: true,
+  stopComment: (ctx) => `Stopped on \`${ctx.branch}\` (${ctx.host})`,
+  reviewComment: true,   // uses default body above
+  closeComment: false,   // no comment on complete
+  closeReason: "completed",
+  labelColor: ({ kind }) => (kind === "review" ? "0E8A16" : "1D76DB"),
+},
+```
+
+### Callable config fields
+
+These static-or-callback fields are resolved once at the relevant stage:
+
+| Field | Static | Callback receives | Default |
+| --- | --- | --- | --- |
+| `agent.command` | `string[]` | `HomesteadContext & { args }` | `["claude"]` |
+| `agent.surfaceLabel` | — | `HomesteadContext & { kind: "issue" \| "pr" }` | `issue-{n}` / `pr-{n}` |
+| `setup` | `SetupStep[]` | `HomesteadContext & { plan }` | `[]` (no steps) |
+| `pr.checks` | `string` | `{ pr, checks? }` | omitted from kickoff prompt |
+| `pr.prBranch` | — | `{ pr, kind: "fork" \| "same-repo" }` | `pr-{n}` (fork) or `pr.headRefName` (same-repo) |
+| `ports[].base` | `number` | `HomesteadContext` | *(required)* |
+
+```ts
+agent: {
+  command: (ctx) => (ctx.args.includes("--fast") ? ["claude", "--fast"] : ["claude"]),
+  surfaceLabel: (ctx) => (ctx.kind === "issue" ? `issue-${ctx.item!.number}` : `pr-${ctx.pr!.number}`),
+},
+setup: (ctx) =>
+  ctx.branch.startsWith("docs-")
+    ? [{ label: "install", run: ["bun", "install"] }]
+    : [
+        { label: "install", run: ["bun", "install"] },
+        { label: "migrate", run: ["bun", "run", "db:migrate"], injectEnv: ["DATABASE_URL"] },
+      ],
+pr: {
+  checks: ({ pr }) => (pr.baseRefName === "main" ? "bun run check" : "bun test"),
+  prBranch: ({ pr, kind }) => (kind === "fork" ? `review-pr-${pr.number}` : pr.headRefName),
+},
+ports: [{ key: "PORT", base: (ctx) => (ctx.slug.startsWith("api-") ? 4000 : 3000) }],
+```
+
+### Migrating from v0.1.8
+
+**v0.2.0** unifies all callback context onto `HomesteadContext`. Update any custom callbacks that relied on the old ad-hoc shapes:
+
+| Callback | v0.1.8 shape | v0.2.0 shape |
+| --- | --- | --- |
+| `worktreeDir` | `{ repoName, slug, branch }` | `HomesteadContext` — `worktreeDir` is `""` inside |
+| `env.derive`, `afterSetup` | standalone `WorktreeContext` | `HomesteadContext & { targetDir, primaryRoot, plan? }` |
+| `agent.prompt` | `{ item, branch, worktreeDir, repoName, args }` | `HomesteadContext & { args }` — use `ctx.repoName`, `ctx.item`, etc. |
+| `issues.comment` | `{ item, branch, worktreeDir, host }` | `HomesteadContext & { host }` |
+| `issues.stopComment` / `reviewComment` / `closeComment` | *(new in 0.2.0)* | `HomesteadContext & { host }` |
+| Teardown hooks | *(new in 0.2.0)* | `HomesteadContext & { verb, … }` |
+
+Fields that still take `(item: WorkItem)` only — `issues.branch`, `label`, `reviewLabel`, `assign` — are unchanged.
+
+Re-run `homestead init` after upgrading to refresh `generated/homestead.config.types.d.ts`.
+
 ## Agent kickoff prompt
 
 `homestead issue` types one kickoff message into each freshly-booted agent. homestead picks a sensible default from the issue — you don't need to configure it.

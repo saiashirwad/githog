@@ -24,7 +24,11 @@ export interface LaunchOptions {
   readonly pollMs?: number;
 }
 
-export const toSpec = (agent: AgentConfig): AgentSpec => {
+type AgentConfigWithResolvedCommand = Omit<AgentConfig, "command"> & {
+  readonly command?: ReadonlyArray<string>;
+};
+
+export const toSpec = (agent: AgentConfigWithResolvedCommand): AgentSpec => {
   const command = agent.command ?? DEFAULT_AGENT_COMMAND;
   const binary = command[0] ?? "claude";
   const trustPrompt = agent.trustPrompt === false ? undefined : agent.trustPrompt;

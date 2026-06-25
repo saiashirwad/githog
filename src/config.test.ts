@@ -40,16 +40,41 @@ test("validateConfigShape preserves function fields", () => {
   expect(merged.issues?.comment).toBe(comment);
 });
 
+test("lifecycle hooks survive validateConfigShape untouched", () => {
+  const afterLaunch = () => Effect.void;
+  const beforeTeardown = () => Effect.void;
+  const afterTeardown = () => Effect.void;
+  const config: HomesteadConfig = { afterLaunch, beforeTeardown, afterTeardown };
+  const merged = validateConfigShape(config);
+  expect(merged.afterLaunch).toBe(afterLaunch);
+  expect(merged.beforeTeardown).toBe(beforeTeardown);
+  expect(merged.afterTeardown).toBe(afterTeardown);
+});
+
 test("validateConfigShape preserves pr block (checks + prompt overrides)", () => {
   const reviewPrompt = () => "review";
   const workPrompt = () => "work";
+  const prBranch = () => "custom-branch";
   const config: HomesteadConfig = {
-    pr: { checks: "bun run check", reviewPrompt, workPrompt },
+    pr: { checks: "bun run check", reviewPrompt, workPrompt, prBranch },
   };
   const merged = validateConfigShape(config);
   expect(merged.pr?.checks).toBe("bun run check");
   expect(merged.pr?.reviewPrompt).toBe(reviewPrompt);
   expect(merged.pr?.workPrompt).toBe(workPrompt);
+  expect(merged.pr?.prBranch).toBe(prBranch);
+});
+
+test("validateConfigShape preserves function checks and ports[].base", () => {
+  const checks = () => "bun test";
+  const base = () => 3000;
+  const config: HomesteadConfig = {
+    pr: { checks },
+    ports: [{ key: "PORT", base }],
+  };
+  const merged = validateConfigShape(config);
+  expect(merged.pr?.checks).toBe(checks);
+  expect(merged.ports?.[0]?.base).toBe(base);
 });
 
 test("requireAgentConfig applies default prompt when unset", async () => {

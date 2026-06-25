@@ -1,7 +1,12 @@
-import { Console, Effect } from "effect";
+import { Effect } from "effect";
+import { makeContext } from "../context.ts";
+import { emit } from "../events.ts";
+import { runAfterLaunch } from "../hooks.ts";
 import { UsageError } from "../errors.ts";
 import { Herdr } from "../herdr/service.ts";
+import { resolveCommand } from "../agent/defaults.ts";
 import { launchAndSeed, toSpec } from "../herdr/launch.ts";
+import { resolveSurfaceLabel } from "../herdr/agent.ts";
 import type { AgentConfig, HomesteadConfig } from "../types.ts";
 import { setupWorktree, type Repo } from "../worktree/index.ts";
 import { ensureLocalBranch, planPrCheckout } from "./branch.ts";
@@ -22,7 +27,7 @@ export const launchPr = Effect.fn("homestead/launch-pr")(function* (input: Launc
 
   yield* validatePrRef(ref);
   const pr = yield* resolvePr(ref);
-  const checkout = planPrCheckout(pr);
+  const checkout = planPrCheckout(pr, config.pr?.prBranch);
 
   if (mode === "work" && checkout.kind === "fork") {
     return yield* new UsageError({
@@ -32,9 +37,12 @@ export const launchPr = Effect.fn("homestead/launch-pr")(function* (input: Launc
     });
   }
 
-  yield* Console.log(
-    `\n▸ ${mode === "review" ? "Reviewing" : "Continuing"} PR #${pr.number}: ${pr.title}`,
-  );
+  yield* emit(config.onEvent, {
+    type: "pr.launching",
+    pr,
+    mode,
+    branch: checkout.branch,
+  });
 
   yield* ensureLocalBranch(repo.primaryRoot, pr, checkout);
 
@@ -46,11 +54,31 @@ export const launchPr = Effect.fn("homestead/launch-pr")(function* (input: Launc
   const prompt = buildPrPrompt(mode, pr, config);
   const surface = agent.surface ?? "worktree";
   const herdr = yield* Herdr;
-  const paneId = yield* herdr.createSurface(surface, plan.targetDir, `pr-${pr.number}`);
-  yield* launchAndSeed(paneId, toSpec(agent), prompt, { readyTimeoutMs: agent.readyTimeoutMs });
-
-  yield* Console.log(
-    `  ✓ PR #${pr.number} ready on \`${checkout.branch}\` in herdr pane ${paneId} — switch in to drive it.\n` +
-      `    Tear down with: homestead ${mode === "review" ? "kill" : "close"} ${checkout.branch}`,
+  const baseCtx = makeContext({
+    repoName: repo.repoName,
+    slug: plan.slug,
+    branch: checkout.branch,
+    worktreeDir: plan.targetDir,
+    pr,
+  });
+  const paneId = yield* herdr.createSurface(
+    surface,
+    plan.targetDir,
+    resolveSurfaceLabel(agent.surfaceLabel, { ...baseCtx, kind: "pr" }),
   );
+  yield* launchAndSeed(
+    paneId,
+    toSpec({ ...agent, command: resolveCommand(agent.command, { ...baseCtx, args: [] as const }) }),
+    prompt,
+    { readyTimeoutMs: agent.readyTimeoutMs },
+  );
+  yield* runAfterLaunch(config.afterLaunch, baseCtx, paneId);
+
+  yield* emit(config.onEvent, {
+    type: "pr.launched",
+    pr,
+    mode,
+    branch: checkout.branch,
+    paneId,
+  });
 });

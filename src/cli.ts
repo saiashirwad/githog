@@ -145,9 +145,14 @@ const killCommand = Command.make(
   ({ branches, keepRemote }) =>
     Effect.gen(function* () {
       const repo = yield* resolveRepo();
-      yield* Effect.forEach(branches, (branch) => killBranch(repo.primaryRoot, repo.repoName, branch, keepRemote), {
-        discard: true,
-      });
+      const config = yield* loadConfigOrUndefined(repo.primaryRoot);
+      yield* Effect.forEach(
+        branches,
+        (branch) => killBranch(repo.primaryRoot, repo.repoName, branch, keepRemote, config),
+        {
+          discard: true,
+        },
+      );
       yield* Console.log(`\n✅ killed ${branches.length}: ${branches.join(", ")}`);
     }),
 ).pipe(Command.withDescription("remove worktree + branch + herdr surface, reverse issue signals"));
@@ -164,10 +169,17 @@ const closeCommand = Command.make(
     Effect.gen(function* () {
       const repo = yield* resolveRepo();
       const config = yield* loadConfigOrUndefined(repo.primaryRoot);
-      const reviewLabel = config?.issues?.reviewLabel ?? DEFAULT_REVIEW_LABEL;
-      yield* Effect.forEach(branches, (branch) => closeBranch(repo.primaryRoot, repo.repoName, branch, reviewLabel), {
-        discard: true,
-      });
+      const reviewLabel =
+        typeof config?.issues?.reviewLabel === "string"
+          ? config.issues.reviewLabel
+          : DEFAULT_REVIEW_LABEL;
+      yield* Effect.forEach(
+        branches,
+        (branch) => closeBranch(repo.primaryRoot, repo.repoName, branch, reviewLabel, config),
+        {
+          discard: true,
+        },
+      );
       yield* Console.log(`\n✅ closed ${branches.length}: ${branches.join(", ")}`);
     }),
 ).pipe(Command.withDescription("finalize: remove worktree + herdr surface, keep the branch, issue → review"));
@@ -186,9 +198,14 @@ const completeCommand = Command.make(
   ({ branches, keepRemote }) =>
     Effect.gen(function* () {
       const repo = yield* resolveRepo();
-      yield* Effect.forEach(branches, (branch) => completeBranch(repo.primaryRoot, repo.repoName, branch, keepRemote), {
-        discard: true,
-      });
+      const config = yield* loadConfigOrUndefined(repo.primaryRoot);
+      yield* Effect.forEach(
+        branches,
+        (branch) => completeBranch(repo.primaryRoot, repo.repoName, branch, keepRemote, config),
+        {
+          discard: true,
+        },
+      );
       yield* Console.log(`\n✅ completed ${branches.length}: ${branches.join(", ")}`);
     }),
 ).pipe(Command.withDescription("mark issue completed on GitHub + remove worktree & branch (local + remote)"));

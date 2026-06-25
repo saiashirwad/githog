@@ -1,6 +1,7 @@
 import { Cause, Effect, Exit, FileSystem, Option, Path, Schema } from "effect";
 import { pathToFileURL } from "node:url";
-import { ConfigDataSchema, type ConfigData, AGENT_DATA_FIELDS, ENV_DATA_FIELDS, ISSUES_SCALAR_FIELDS, PR_DATA_FIELDS } from "./config-schema.ts";
+import { ConfigDataSchema } from "./config-schema.ts";
+import { mergeValidatedConfig, toConfigData } from "./config-strip.ts";
 import { ConfigInvalid, ConfigNotFound } from "./errors.ts";
 import type { HomesteadConfig } from "./types.ts";
 
@@ -13,71 +14,6 @@ const defaultExport = (mod: unknown): HomesteadConfig | undefined => {
   if (typeof mod !== "object" || mod === null || !("default" in mod)) return undefined;
   return isConfigObject(mod.default) ? mod.default : undefined;
 };
-
-const pickDefined = <T extends object, K extends keyof T>(
-  source: T,
-  keys: readonly K[],
-): Pick<T, K> => {
-  const result = {} as Pick<T, K>;
-  for (const key of keys) {
-    const value = source[key];
-    if (value !== undefined) {
-      result[key] = value;
-    }
-  }
-  return result;
-};
-
-const mergeOptionalSection = <T extends object>(
-  original: T | undefined,
-  data: Partial<T> | undefined,
-  hooks: Partial<T>,
-): T | undefined => {
-  if (original === undefined && data === undefined) return undefined;
-  return { ...data, ...hooks } as T;
-};
-
-const toConfigData = (config: HomesteadConfig): ConfigData => ({
-  ports: config.ports,
-  services: config.services,
-  setup: config.setup,
-  env: config.env === undefined ? undefined : pickDefined(config.env, ENV_DATA_FIELDS),
-  agent:
-    config.agent === undefined
-      ? undefined
-      : {
-          ...pickDefined(config.agent, AGENT_DATA_FIELDS),
-          ...(config.agent.command !== undefined && { command: [...config.agent.command] }),
-        },
-  issues:
-    config.issues === undefined
-      ? undefined
-      : {
-          ...pickDefined(config.issues, ISSUES_SCALAR_FIELDS),
-          ...(typeof config.issues.comment === "boolean" ? { comment: config.issues.comment } : {}),
-        },
-  pr:
-    config.pr === undefined
-      ? undefined
-      : pickDefined(config.pr, PR_DATA_FIELDS),
-});
-
-const mergeValidatedConfig = (config: HomesteadConfig, data: ConfigData): HomesteadConfig => ({
-  ...config,
-  ports: data.ports,
-  services: data.services,
-  setup: data.setup,
-  env: mergeOptionalSection(config.env, data.env, { derive: config.env?.derive }),
-  agent: mergeOptionalSection(config.agent, data.agent, { prompt: config.agent?.prompt }),
-  issues: mergeOptionalSection(config.issues, data.issues, {
-    branch: config.issues?.branch,
-    comment: config.issues?.comment ?? data.issues?.comment,
-  }),
-  pr: mergeOptionalSection(config.pr, data.pr, {
-    reviewPrompt: config.pr?.reviewPrompt,
-    workPrompt: config.pr?.workPrompt,
-  }),
-});
 
 export const validateConfigShape = (config: HomesteadConfig): HomesteadConfig => {
   const data = Schema.decodeUnknownSync(ConfigDataSchema)(toConfigData(config));
