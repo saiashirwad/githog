@@ -2,6 +2,7 @@ import { Cause, Console, Effect, FileSystem, Option, Path, Schema } from "effect
 import * as os from "node:os";
 import { runExit } from "./process.ts";
 import { slugify } from "./text.ts";
+import type { HomesteadContext } from "./context.ts";
 import type { HomesteadServices, IssuesConfig, TrackingContext, WorkItem } from "./types.ts";
 
 export const TrackingStateSchema = Schema.Struct({
@@ -28,6 +29,17 @@ const gh = Effect.fn("homestead/gh")(function* (label: string, args: ReadonlyArr
     yield* Console.log(`  ⚠ ${label} failed (exit ${code}, gh ${args.join(" ")}) — continuing`);
   }
 });
+
+type StopCtx = HomesteadContext & { readonly host: string };
+
+export const resolveStopComment = (
+  cfg: boolean | ((ctx: StopCtx) => string) | undefined,
+  ctx: StopCtx,
+): string | undefined => {
+  if (cfg === false) return undefined;
+  if (typeof cfg === "function") return cfg(ctx);
+  return `homestead: agent stopped on \`${ctx.branch}\` (${ctx.host})`;
+};
 
 export const loadTrackingState = Effect.fn("homestead/load-tracking-state")(function* (
   repoName: string,
@@ -110,7 +122,11 @@ export const markStarted = Effect.fn("homestead/mark-started")(function* (
     );
 });
 
-export const markStopped = Effect.fn("homestead/mark-stopped")(function* (repoName: string, branch: string) {
+export const markStopped = Effect.fn("homestead/mark-stopped")(function* (
+  repoName: string,
+  branch: string,
+  issues?: IssuesConfig,
+) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const file = statePath(path, repoName, branch);
@@ -127,7 +143,21 @@ export const markStopped = Effect.fn("homestead/mark-stopped")(function* (repoNa
     yield* gh("gh issue edit --remove-assignee", ["issue", "edit", ref, "--remove-assignee", "@me"]);
   }
   if (state.value.commented === true) {
-    yield* gh("gh issue comment", ["issue", "comment", ref, "--body", `homestead: agent stopped on \`${branch}\` (${host})`]);
+    const ctx: StopCtx = {
+      repoName,
+      slug: branch,
+      branch,
+      worktreeDir: state.value.worktreeDir ?? "",
+      env: () => undefined,
+      host,
+      ...(state.value.title !== undefined
+        ? { item: { number: state.value.number, url: state.value.url, title: state.value.title } }
+        : {}),
+    };
+    const body = resolveStopComment(issues?.stopComment, ctx);
+    if (body !== undefined) {
+      yield* gh("gh issue comment", ["issue", "comment", ref, "--body", body]);
+    }
   }
   yield* fs.remove(file).pipe(Effect.orElseSucceed(() => undefined));
 });
