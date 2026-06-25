@@ -7,9 +7,11 @@ import type {
   EnvConfigData,
   IssuesConfigData,
   PortSpec,
+  PrConfigData,
   ServiceSpec,
   SetupStep,
 } from "./config-schema.ts";
+import type { PrView } from "./pr/resolve.ts";
 import type { WorkItem } from "./work-item.ts";
 
 export type {
@@ -17,6 +19,7 @@ export type {
   EnvConfigData,
   IssuesConfigData,
   PortSpec,
+  PrConfigData,
   ServiceSpec,
   SetupStep,
 } from "./config-schema.ts";
@@ -65,6 +68,16 @@ export interface IssuesConfig extends Omit<IssuesConfigData, "comment"> {
   readonly comment?: boolean | ((ctx: TrackingContext) => string);
 }
 
+export interface PrPromptContext {
+  readonly pr: PrView;
+  readonly checks?: string | undefined;
+}
+
+export interface PrConfig extends PrConfigData {
+  readonly reviewPrompt?: ((ctx: PrPromptContext) => string) | undefined;
+  readonly workPrompt?: ((ctx: PrPromptContext) => string) | undefined;
+}
+
 export interface HomesteadConfig {
   readonly worktreeDir?:
     | ((ctx: { readonly repoName: string; readonly slug: string; readonly branch: string }) => string)
@@ -75,6 +88,7 @@ export interface HomesteadConfig {
   readonly setup?: ReadonlyArray<SetupStep>;
   readonly agent?: AgentConfig;
   readonly issues?: IssuesConfig;
+  readonly pr?: PrConfig;
   readonly afterSetup?:
     | ((ctx: WorktreeContext & { readonly plan: Plan }) => Effect.Effect<void, never, HomesteadServices>)
     | undefined;

@@ -1,6 +1,6 @@
 import { Cause, Effect, Exit, FileSystem, Option, Path, Schema } from "effect";
 import { pathToFileURL } from "node:url";
-import { ConfigDataSchema, type ConfigData, AGENT_DATA_FIELDS, ENV_DATA_FIELDS, ISSUES_SCALAR_FIELDS } from "./config-schema.ts";
+import { ConfigDataSchema, type ConfigData, AGENT_DATA_FIELDS, ENV_DATA_FIELDS, ISSUES_SCALAR_FIELDS, PR_DATA_FIELDS } from "./config-schema.ts";
 import { ConfigInvalid, ConfigNotFound } from "./errors.ts";
 import type { HomesteadConfig } from "./types.ts";
 
@@ -63,6 +63,10 @@ const toConfigData = (config: HomesteadConfig): ConfigData => ({
           ...pickDefined(config.issues, ISSUES_SCALAR_FIELDS),
           ...(typeof config.issues.comment === "boolean" ? { comment: config.issues.comment } : {}),
         },
+  pr:
+    config.pr === undefined
+      ? undefined
+      : pickDefined(config.pr, PR_DATA_FIELDS),
 });
 
 const mergeValidatedConfig = (config: HomesteadConfig, data: ConfigData): HomesteadConfig => ({
@@ -75,6 +79,10 @@ const mergeValidatedConfig = (config: HomesteadConfig, data: ConfigData): Homest
   issues: mergeOptionalSection(config.issues, data.issues, {
     branch: config.issues?.branch,
     comment: config.issues?.comment ?? data.issues?.comment,
+  }),
+  pr: mergeOptionalSection(config.pr, data.pr, {
+    reviewPrompt: config.pr?.reviewPrompt,
+    workPrompt: config.pr?.workPrompt,
   }),
 });
 

@@ -40,6 +40,18 @@ test("validateConfigShape preserves function fields", () => {
   expect(merged.issues?.comment).toBe(comment);
 });
 
+test("validateConfigShape preserves pr block (checks + prompt overrides)", () => {
+  const reviewPrompt = () => "review";
+  const workPrompt = () => "work";
+  const config: HomesteadConfig = {
+    pr: { checks: "bun run check", reviewPrompt, workPrompt },
+  };
+  const merged = validateConfigShape(config);
+  expect(merged.pr?.checks).toBe("bun run check");
+  expect(merged.pr?.reviewPrompt).toBe(reviewPrompt);
+  expect(merged.pr?.workPrompt).toBe(workPrompt);
+});
+
 test("requireAgentConfig applies default prompt when unset", async () => {
   const agent = await Effect.runPromise(requireAgentConfig({ command: ["claude"] }));
   expect(agent.prompt).toBeTypeOf("function");

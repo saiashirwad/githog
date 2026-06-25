@@ -69,6 +69,12 @@ export const ISSUES_SCALAR_FIELDS = ["label", "assign", "reviewLabel"] as const 
   keyof IssuesConfigData
 >;
 
+export const PrConfigDataSchema = Schema.Struct({
+  checks: Schema.optional(Schema.String),
+});
+export type PrConfigData = typeof PrConfigDataSchema.Type;
+export const PR_DATA_FIELDS = ["checks"] as const satisfies ReadonlyArray<keyof PrConfigData>;
+
 const emptyPorts = Schema.Array(PortSpecSchema).pipe(
   Schema.optional,
   Schema.withDecodingDefault(Effect.succeed([] as Array<PortSpec>)),
@@ -89,5 +95,6 @@ export const ConfigDataSchema = Schema.Struct({
   env: Schema.optional(EnvConfigDataSchema),
   agent: Schema.optional(AgentConfigDataSchema),
   issues: Schema.optional(IssuesConfigDataSchema),
+  pr: Schema.optional(PrConfigDataSchema),
 }).pipe(Schema.annotate({ parseOptions: { errors: "all" } }));
 export type ConfigData = typeof ConfigDataSchema.Type;
