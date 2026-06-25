@@ -36,6 +36,20 @@ export const resolveLabel = (
   return t === undefined || t === "" ? undefined : t;
 };
 
+export const resolveReviewLabel = (
+  fallback: string,
+  issues: IssuesConfig | undefined,
+  state: Option.Option<TrackingState>,
+): string => {
+  if (Option.isNone(state)) return fallback;
+  const item: WorkItem = {
+    number: state.value.number,
+    url: state.value.url,
+    title: state.value.title ?? "",
+  };
+  return resolveLabel(issues?.reviewLabel, item) ?? fallback;
+};
+
 export const resolveAssignees = (
   cfg: boolean | string | ((item: WorkItem) => string | ReadonlyArray<string>) | undefined,
   item: WorkItem,

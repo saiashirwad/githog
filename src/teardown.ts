@@ -5,7 +5,13 @@ import { Herdr } from "./herdr/service.ts";
 import { capture, runExit } from "./process.ts";
 import { refExists } from "./worktree/base-ref.ts";
 import { makeContext } from "./context.ts";
-import { loadTrackingState, markCompleted, markFinished, markStopped } from "./tracking.ts";
+import {
+  loadTrackingState,
+  markCompleted,
+  markFinished,
+  markStopped,
+  resolveReviewLabel,
+} from "./tracking.ts";
 import type { HomesteadConfig, HomesteadContext, HomesteadServices } from "./types.ts";
 
 export const runBeforeTeardown = (
@@ -135,15 +141,21 @@ export const closeBranch = Effect.fn("homestead/close-branch")(function* (
 ) {
   yield* emit(config?.onEvent, teardownEvents("close", branch, "start"));
 
-  const tracked = Option.isSome(yield* loadTrackingState(repoName, branch));
+  const trackedState = yield* loadTrackingState(repoName, branch);
+  const tracked = Option.isSome(trackedState);
+  const resolvedReviewLabel = resolveReviewLabel(reviewLabel, config?.issues, trackedState);
   const ctx = makeContext({ repoName, slug: branch, branch, worktreeDir: "" });
 
   yield* runBeforeTeardown(config?.beforeTeardown, ctx, "close", tracked);
 
-  yield* teardownWorktree(primaryRoot, branch, markFinished(repoName, branch, reviewLabel, config?.issues));
+  yield* teardownWorktree(
+    primaryRoot,
+    branch,
+    markFinished(repoName, branch, resolvedReviewLabel, config?.issues),
+  );
 
-  yield* runAfterTeardown(config?.afterTeardown, ctx, "close", reviewLabel);
-  yield* emit(config?.onEvent, teardownEvents("close", branch, "done", reviewLabel));
+  yield* runAfterTeardown(config?.afterTeardown, ctx, "close", resolvedReviewLabel);
+  yield* emit(config?.onEvent, teardownEvents("close", branch, "done", resolvedReviewLabel));
 });
 
 export const completeBranch = Effect.fn("homestead/complete-branch")(function* (

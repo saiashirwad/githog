@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import {
   resolveAssignees,
   resolveCloseComment,
@@ -7,6 +7,7 @@ import {
   resolveLabel,
   resolveLabelColor,
   resolveReviewComment,
+  resolveReviewLabel,
   resolveStopComment,
   TrackingStateSchema,
 } from "./tracking.ts";
@@ -83,6 +84,13 @@ test("resolveLabel passes string through and calls function", () => {
   expect(resolveLabel("agent:wip", item)).toBe("agent:wip");
   expect(resolveLabel((i: any) => `area:${i.number}`, item)).toBe("area:7");
   expect(resolveLabel(undefined, item)).toBeUndefined();
+});
+
+test("resolveReviewLabel uses tracking item for function reviewLabel", () => {
+  const state = Option.some({ number: 7, url: "u", title: "t" });
+  expect(resolveReviewLabel("agent:review", { reviewLabel: (i) => `area:${i.number}` }, state)).toBe("area:7");
+  expect(resolveReviewLabel("agent:review", { reviewLabel: "agent:wip" }, state)).toBe("agent:wip");
+  expect(resolveReviewLabel("agent:review", undefined, Option.none())).toBe("agent:review");
 });
 
 test("resolveAssignees normalizes to logins", () => {
