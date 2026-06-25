@@ -52,7 +52,7 @@ export const stripAgentData = (agent: AgentConfig | undefined): AgentConfigData 
 /** Scalar subset of issues config that passes Schema decode (callbacks stripped). */
 export const stripIssuesData = (issues: IssuesConfig | undefined): IssuesConfigData | undefined => {
   if (issues === undefined) return undefined;
-  const out: IssuesConfigData = {};
+  const out: { -readonly [K in keyof IssuesConfigData]: IssuesConfigData[K] } = {};
   for (const key of ISSUES_SCALAR_FIELDS) {
     const v = issues[key];
     if (typeof v === "string") out[key] = v;

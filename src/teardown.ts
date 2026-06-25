@@ -77,7 +77,7 @@ const deleteRemoteBranch = Effect.fn("homestead/delete-remote-branch")(function*
   }
   if (Option.isNone(tracked)) return;
   yield* runExit("git", ["push", "origin", "--delete", branch], { cwd: primaryRoot }).pipe(
-    Effect.catchDefect(() => Effect.succeed(undefined)),
+    Effect.catchDefect(() => Effect.void),
   );
 });
 
