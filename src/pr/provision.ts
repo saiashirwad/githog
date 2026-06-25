@@ -6,7 +6,7 @@ import type { AgentConfig, HomesteadConfig } from "../types.ts";
 import { setupWorktree, type Repo } from "../worktree/index.ts";
 import { ensureLocalBranch, planPrCheckout } from "./branch.ts";
 import { buildPrPrompt } from "./prompt.ts";
-import type { PrRef } from "./ref.ts";
+import { validatePrRef, type PrRef } from "./ref.ts";
 import { resolvePr } from "./resolve.ts";
 
 export interface LaunchPrInput {
@@ -20,6 +20,7 @@ export interface LaunchPrInput {
 export const launchPr = Effect.fn("homestead/launch-pr")(function* (input: LaunchPrInput) {
   const { mode, ref, config, repo, agent } = input;
 
+  yield* validatePrRef(ref);
   const pr = yield* resolvePr(ref);
   const checkout = planPrCheckout(pr);
 

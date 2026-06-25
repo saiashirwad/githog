@@ -198,6 +198,11 @@ const reviewCommand = Command.make(
       );
       yield* launchPr({ mode: "review", ref, config, repo, agent }).pipe(
         Effect.catchTags({
+          IssueRepoMismatch: (e) =>
+            fail(
+              `[homestead] PR URL points at ${e.owner}/${e.repo}, but you're in ${e.here}. ` +
+                `Run homestead from inside ${e.owner}/${e.repo}, or pass the bare PR number.`,
+            ),
           UsageError: (e) => fail(e.message),
           HerdrError: (e) => fail(`[homestead] couldn't open the PR in herdr (${e.op})`),
           HerdrNotAvailable: (e) => fail(e.reason),
@@ -219,6 +224,11 @@ const prCommand = Command.make(
       );
       yield* launchPr({ mode: "work", ref, config, repo, agent }).pipe(
         Effect.catchTags({
+          IssueRepoMismatch: (e) =>
+            fail(
+              `[homestead] PR URL points at ${e.owner}/${e.repo}, but you're in ${e.here}. ` +
+                `Run homestead from inside ${e.owner}/${e.repo}, or pass the bare PR number.`,
+            ),
           UsageError: (e) => fail(e.message),
           HerdrError: (e) => fail(`[homestead] couldn't open the PR in herdr (${e.op})`),
           HerdrNotAvailable: (e) => fail(e.reason),

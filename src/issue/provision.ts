@@ -95,7 +95,7 @@ export const requireAgentConfig = (
   agent === undefined
     ? Effect.fail(
         new UsageError({
-          message: "[homestead] config has no `agent` block — launching an agent per issue needs one.",
+          message: "[homestead] config has no `agent` block — launching an agent needs one.",
         }),
       )
     : Effect.succeed(resolveAgentDefaults(agent));
