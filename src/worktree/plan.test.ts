@@ -2,7 +2,10 @@ import { expect, test } from "bun:test";
 import {
   collectUsedPorts,
   computePortEdits,
+  resolvePortBase,
 } from "./plan.ts";
+
+const portCtx = { repoName: "app", slug: "feat", branch: "feat/x", worktreeDir: "/wt", env: () => undefined } as const;
 
 test("collectUsedPorts gathers integer port values from sibling env files", () => {
   const ports = [
@@ -30,7 +33,7 @@ test("computePortEdits preserves existing target env values", () => {
   const ports = [{ key: "PORT", base: 3000 }] as const;
   const used = new Map([["PORT", new Set([3000, 3001])]]);
 
-  const edits = computePortEdits("PORT=3099\nOTHER=1\n", ports, used);
+  const edits = computePortEdits("PORT=3099\nOTHER=1\n", ports, used, portCtx);
 
   expect(edits).toEqual([["PORT", "3099"]]);
 });
@@ -45,7 +48,7 @@ test("computePortEdits allocates next free port when target env lacks key", () =
     ["VITE_PORT", new Set([5173])],
   ]);
 
-  const edits = computePortEdits("", ports, used);
+  const edits = computePortEdits("", ports, used, portCtx);
 
   expect(edits).toEqual([
     ["PORT", "3002"],
@@ -57,7 +60,7 @@ test("computePortEdits integrates nextFreePort for partially used ranges", () =>
   const ports = [{ key: "PORT", base: 3000 }] as const;
   const used = new Map([["PORT", new Set([3000, 3002])]]);
 
-  expect(computePortEdits("", ports, used)).toEqual([["PORT", "3001"]]);
+  expect(computePortEdits("", ports, used, portCtx)).toEqual([["PORT", "3001"]]);
 });
 
 test("sibling env scanning skips non-integer and missing keys", () => {
@@ -69,4 +72,16 @@ test("sibling env scanning skips non-integer and missing keys", () => {
   );
 
   expect(used.get("PORT")).toEqual(new Set([4000]));
+});
+
+test("resolvePortBase passes number through and calls function", () => {
+  expect(resolvePortBase(3000, portCtx)).toBe(3000);
+  expect(resolvePortBase((c) => (c.branch.startsWith("feat") ? 4000 : 3000), portCtx)).toBe(4000);
+});
+
+test("computePortEdits resolves function base", () => {
+  const ports = [{ key: "PORT", base: (c: typeof portCtx) => (c.branch.startsWith("feat") ? 4000 : 3000) }];
+  const used = new Map([["PORT", new Set([4000])]]);
+
+  expect(computePortEdits("", ports, used, portCtx)).toEqual([["PORT", "4001"]]);
 });

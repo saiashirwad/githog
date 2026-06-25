@@ -7,7 +7,7 @@ import type {
   AgentConfigData,
   EnvConfigData,
   IssuesConfigData,
-  PortSpec,
+  PortSpec as PortSpecData,
   PrConfigData,
   ServiceSpec,
   SetupStep,
@@ -20,11 +20,14 @@ export type {
   AgentConfigData,
   EnvConfigData,
   IssuesConfigData,
-  PortSpec,
   PrConfigData,
   ServiceSpec,
   SetupStep,
 } from "./config-schema.ts";
+
+export interface PortSpec extends Omit<PortSpecData, "base"> {
+  readonly base: number | ((ctx: HomesteadContext) => number);
+}
 
 export type { WorkItem } from "./work-item.ts";
 export type { HomesteadContext } from "./context.ts";
@@ -94,7 +97,8 @@ export interface PrPromptContext {
   readonly checks?: string | undefined;
 }
 
-export interface PrConfig extends PrConfigData {
+export interface PrConfig extends Omit<PrConfigData, "checks"> {
+  readonly checks?: string | ((ctx: PrPromptContext) => string) | undefined;
   readonly reviewPrompt?: ((ctx: PrPromptContext) => string) | undefined;
   readonly workPrompt?: ((ctx: PrPromptContext) => string) | undefined;
   readonly prBranch?: ((ctx: { pr: PrView; kind: "fork" | "same-repo" }) => string) | undefined;

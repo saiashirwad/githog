@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { buildPrPrompt } from "./prompt.ts";
+import { resolveChecks, buildPrPrompt } from "./prompt.ts";
 import type { PrView } from "./resolve.ts";
 import type { HomesteadConfig } from "../types.ts";
 
@@ -34,4 +34,22 @@ test("work prompt is about continuing the PR", () => {
 test("config reviewPrompt override wins", () => {
   const config: HomesteadConfig = { pr: { reviewPrompt: (ctx) => `CUSTOM ${ctx.pr.number}` } };
   expect(buildPrPrompt("review", pr, config)).toBe("CUSTOM 87");
+});
+
+test("checks string passthrough + function", () => {
+  expect(resolveChecks("bun test", { pr: {} } as any)).toBe("bun test");
+  expect(
+    resolveChecks((c: any) => (c.pr.baseRefName === "main" ? "e2e" : "smoke"), {
+      pr: { baseRefName: "main" },
+    } as any),
+  ).toBe("e2e");
+  expect(resolveChecks(undefined, { pr: {} } as any)).toBeUndefined();
+});
+
+test("buildPrPrompt resolves function checks", () => {
+  const config: HomesteadConfig = {
+    pr: { checks: (ctx) => (ctx.pr.baseRefName === "main" ? "bun test" : "smoke") },
+  };
+  const out = buildPrPrompt("review", pr, config);
+  expect(out).toContain("bun test");
 });

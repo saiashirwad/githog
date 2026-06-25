@@ -1,6 +1,6 @@
 import { Cause, Effect, Exit, FileSystem, Option, Path, Schema } from "effect";
 import { pathToFileURL } from "node:url";
-import { ConfigDataSchema, type ConfigData, AGENT_DATA_FIELDS, ENV_DATA_FIELDS, PR_DATA_FIELDS } from "./config-schema.ts";
+import { ConfigDataSchema, type ConfigData, AGENT_DATA_FIELDS, ENV_DATA_FIELDS } from "./config-schema.ts";
 import { ConfigInvalid, ConfigNotFound } from "./errors.ts";
 import type { HomesteadConfig } from "./types.ts";
 
@@ -37,8 +37,13 @@ const mergeOptionalSection = <T extends object>(
   return { ...data, ...hooks } as T;
 };
 
+// Callable `ports[].base` values cannot pass Schema decode — substitute 0 and
+// re-attach the original specs in mergeValidatedConfig.
 const toConfigData = (config: HomesteadConfig): ConfigData => ({
-  ports: config.ports,
+  ports: config.ports?.map(({ key, base }) => ({
+    key,
+    base: typeof base === "function" ? 0 : base,
+  })),
   services: config.services,
   setup: typeof config.setup === "function" ? [] : config.setup,
   env: config.env === undefined ? undefined : pickDefined(config.env, ENV_DATA_FIELDS),
@@ -69,12 +74,14 @@ const toConfigData = (config: HomesteadConfig): ConfigData => ({
   pr:
     config.pr === undefined
       ? undefined
-      : pickDefined(config.pr, PR_DATA_FIELDS),
+      : {
+          ...(typeof config.pr.checks === "string" ? { checks: config.pr.checks } : {}),
+        },
 });
 
 const mergeValidatedConfig = (config: HomesteadConfig, data: ConfigData): HomesteadConfig => ({
   ...config,
-  ports: data.ports,
+  ports: config.ports ?? data.ports,
   services: data.services,
   setup: typeof config.setup === "function" ? config.setup : data.setup,
   env: mergeOptionalSection(config.env, data.env, { derive: config.env?.derive }),
@@ -99,6 +106,7 @@ const mergeValidatedConfig = (config: HomesteadConfig, data: ConfigData): Homest
     reviewPrompt: config.pr?.reviewPrompt,
     workPrompt: config.pr?.workPrompt,
     prBranch: config.pr?.prBranch,
+    checks: config.pr?.checks ?? data.pr?.checks,
   }),
 });
 

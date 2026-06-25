@@ -8,8 +8,10 @@ import {
   DEFAULT_ENV_FALLBACK,
   DEFAULT_ENV_SOURCE,
 } from "../defaults.ts";
+import { makeContext } from "../context.ts";
 import {
   type HomesteadConfig,
+  type HomesteadContext,
   type Plan,
   type PortSpec,
   type WorktreeContext,
@@ -67,15 +69,22 @@ export const collectUsedPorts = (
   return used;
 };
 
+export const resolvePortBase = (
+  base: number | ((ctx: HomesteadContext) => number),
+  ctx: HomesteadContext,
+): number => (typeof base === "function" ? base(ctx) : base);
+
 export const computePortEdits = (
   targetEnv: string,
   ports: ReadonlyArray<PortSpec>,
   used: ReadonlyMap<string, ReadonlySet<number>>,
+  ctx: HomesteadContext,
 ): ReadonlyArray<readonly [string, string]> => {
   const envEdits: Array<readonly [string, string]> = [];
   for (const spec of ports) {
     const existing = readEnvVar(targetEnv, spec.key);
-    const value = existing ?? String(nextFreePort(spec.base, used.get(spec.key) ?? new Set()));
+    const value =
+      existing ?? String(nextFreePort(resolvePortBase(spec.base, ctx), used.get(spec.key) ?? new Set()));
     envEdits.push([spec.key, value]);
   }
   return envEdits;
@@ -185,7 +194,14 @@ export const resolvePlan = Effect.fn("homestead/resolve-plan")(function* (
   }
   const used = collectUsedPorts(siblingEnvContents, ports);
 
-  const envEdits: Array<readonly [string, string]> = [...computePortEdits(targetEnv, ports, used)];
+  const portCtx = makeContext({
+    repoName: repo.repoName,
+    slug: target.slug,
+    branch: target.branch,
+    worktreeDir: target.targetDir,
+    env: (key) => readEnvVar(sourceContent, key),
+  });
+  const envEdits: Array<readonly [string, string]> = [...computePortEdits(targetEnv, ports, used, portCtx)];
 
   // Derived keys (e.g. a per-worktree DATABASE_URL) — the config function reads
   // the SOURCE .env via ctx.env and returns the values to override.

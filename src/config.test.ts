@@ -65,6 +65,18 @@ test("validateConfigShape preserves pr block (checks + prompt overrides)", () =>
   expect(merged.pr?.prBranch).toBe(prBranch);
 });
 
+test("validateConfigShape preserves function checks and ports[].base", () => {
+  const checks = () => "bun test";
+  const base = () => 3000;
+  const config: HomesteadConfig = {
+    pr: { checks },
+    ports: [{ key: "PORT", base }],
+  };
+  const merged = validateConfigShape(config);
+  expect(merged.pr?.checks).toBe(checks);
+  expect(merged.ports?.[0]?.base).toBe(base);
+});
+
 test("requireAgentConfig applies default prompt when unset", async () => {
   const agent = await Effect.runPromise(requireAgentConfig({ command: ["claude"] }));
   expect(agent.prompt).toBeTypeOf("function");

@@ -10,8 +10,8 @@
 //   export default config;
 
 export interface PortSpec {
+  readonly base: number | ((ctx: HomesteadContext) => number);
   readonly key: string;
-  readonly base: number;
 }
 
 export interface ServiceSpec {
@@ -110,18 +110,18 @@ export interface IssuesConfig {
 }
 
 export interface PrConfig {
+  readonly checks?: string | ((ctx: PrPromptContext) => string) | undefined;
   readonly reviewPrompt?: ((ctx: PrPromptContext) => string) | undefined;
   readonly workPrompt?: ((ctx: PrPromptContext) => string) | undefined;
   readonly prBranch?: ((ctx: { pr: PrView; kind: "fork" | "same-repo"; }) => string) | undefined;
-  readonly checks?: string | undefined;
 }
 
 export interface HomesteadConfig {
   readonly worktreeDir?: ((ctx: { readonly repoName: string; readonly slug: string; readonly branch: string; }) => string) | undefined;
-  readonly ports?: ReadonlyArray<{ readonly key: string; readonly base: number; }> | undefined;
+  readonly ports?: ReadonlyArray<PortSpec> | undefined;
   readonly env?: EnvConfig | undefined;
   readonly services?: ReadonlyArray<{ readonly name: string; readonly host: string; readonly port: number; readonly start?: ReadonlyArray<string> | undefined; readonly timeoutMs?: number | undefined; }> | undefined;
-  readonly setup?: ReadonlyArray<{ readonly label: string; readonly run: ReadonlyArray<string>; readonly cwd?: string | undefined; readonly injectEnv?: ReadonlyArray<string> | undefined; readonly fatal?: boolean | undefined; }> | undefined;
+  readonly setup?: ReadonlyArray<{ readonly label: string; readonly run: ReadonlyArray<string>; readonly cwd?: string | undefined; readonly injectEnv?: ReadonlyArray<string> | undefined; readonly fatal?: boolean | undefined; }> | ((ctx: HomesteadContext & { plan: Plan; }) => ReadonlyArray<SetupStep>) | undefined;
   readonly agent?: AgentConfig | undefined;
   readonly issues?: IssuesConfig | undefined;
   readonly pr?: PrConfig | undefined;
