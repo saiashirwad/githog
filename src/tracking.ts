@@ -7,6 +7,8 @@ import type { HomesteadServices, IssuesConfig, TrackingContext, WorkItem } from 
 export const TrackingStateSchema = Schema.Struct({
   number: Schema.Number,
   url: Schema.String,
+  title: Schema.optional(Schema.String),
+  worktreeDir: Schema.optional(Schema.String),
   label: Schema.optional(Schema.String),
   assigned: Schema.optional(Schema.Boolean),
   commented: Schema.optional(Schema.Boolean),
@@ -88,6 +90,8 @@ export const markStarted = Effect.fn("homestead/mark-started")(function* (
   const state: TrackingState = {
     number: item.number,
     url: item.url,
+    title: item.title,
+    worktreeDir,
     ...(wantLabel ? { label } : {}),
     ...(wantAssign ? { assigned: true } : {}),
     ...(commented ? { commented: true } : {}),
