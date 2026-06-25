@@ -2,6 +2,7 @@ import { Console, Effect } from "effect";
 import type { HomesteadConfig, Plan, WorktreeOptions } from "../types.ts";
 import { makeWorktreeContext, printPlan, resolvePlan, resolveTarget } from "./plan.ts";
 import { ensureServices, printDone, runSetup, writeEnv } from "./provision.ts";
+import { normalizeHookResult } from "../hooks.ts";
 import type { Repo } from "./repo.ts";
 
 export { resolveRepo } from "./repo.ts";
@@ -30,7 +31,7 @@ export const setupWorktree = Effect.fn("homestead/setup-worktree")(function* (
 
   if (config.afterSetup !== undefined) {
     const ctx = { ...makeWorktreeContext(repo, target, plan.sourceContent), plan };
-    yield* config.afterSetup(ctx).pipe(Effect.orDie);
+    yield* normalizeHookResult(config.afterSetup(ctx)).pipe(Effect.orDie);
   }
 
   yield* printDone(plan);

@@ -23,6 +23,26 @@ test("runAfterTeardown no-op when undefined", async () => {
   expect(true).toBe(true);
 });
 
+test("runAfterTeardown awaits a Promise-returning hook (no effect import needed)", async () => {
+  const seen: string[] = [];
+  // A plain async hook — the shape a self-contained config uses when it can't
+  // import `effect`. normalizeHookResult must await it before teardown proceeds.
+  const hook = async (c: { verb: string }) => {
+    await Promise.resolve();
+    seen.push(c.verb);
+  };
+  const ctx = makeContext({ repoName: "r", slug: "b", branch: "b", worktreeDir: "/w" });
+  await Effect.runPromise(runAfterTeardown(hook, ctx, "kill").pipe(Effect.provide(TestLayer)));
+  expect(seen).toEqual(["kill"]);
+});
+
+test("runAfterTeardown ignores a non-thenable return", async () => {
+  const ctx = makeContext({ repoName: "r", slug: "b", branch: "b", worktreeDir: "/w" });
+  // Returning undefined/void must not crash the `yield*` in teardown.
+  await Effect.runPromise(runAfterTeardown(() => undefined, ctx, "kill").pipe(Effect.provide(TestLayer)));
+  expect(true).toBe(true);
+});
+
 test("teardownEvents constructs start/done pairs", () => {
   expect(teardownEvents("kill", "feat/x", "start")).toEqual({
     type: "teardown",

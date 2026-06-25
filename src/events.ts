@@ -1,4 +1,5 @@
 import { Console, Effect } from "effect";
+import { normalizeHookResult } from "./hooks.ts";
 import type { PrView } from "./pr/resolve.ts";
 import type { HomesteadServices } from "./types.ts";
 import type { WorkItem } from "./work-item.ts";
@@ -96,6 +97,7 @@ export const defaultReporter = (e: HomesteadEvent): Effect.Effect<void, never, H
 };
 
 export const emit = (
-  onEvent: ((e: HomesteadEvent) => Effect.Effect<void, never, HomesteadServices>) | undefined,
+  onEvent: ((e: HomesteadEvent) => unknown) | undefined,
   e: HomesteadEvent,
-): Effect.Effect<void, never, HomesteadServices> => (onEvent ?? defaultReporter)(e);
+): Effect.Effect<void, never, HomesteadServices> =>
+  onEvent === undefined ? defaultReporter(e) : normalizeHookResult(onEvent(e));

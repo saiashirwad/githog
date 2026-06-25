@@ -49,8 +49,16 @@ export interface EnvConfig extends EnvConfigData {
 }
 
 export type AgentPromptContext = HomesteadContext & {
+  readonly item: WorkItem;
   readonly args: ReadonlyArray<string>;
 };
+
+// Discriminated by `kind`: the issue surface always carries `item`, the PR
+// surface always carries `pr`. Modeling it as a union lets callbacks narrow on
+// `kind` instead of asserting presence with `!`.
+export type SurfaceCtx =
+  | (HomesteadContext & { readonly kind: "issue"; readonly item: WorkItem })
+  | (HomesteadContext & { readonly kind: "pr"; readonly pr: PrView });
 
 export interface AgentConfig extends Omit<AgentConfigData, "command"> {
   readonly command?:
@@ -58,7 +66,7 @@ export interface AgentConfig extends Omit<AgentConfigData, "command"> {
     | ((ctx: HomesteadContext & { args: ReadonlyArray<string> }) => ReadonlyArray<string>)
     | undefined;
   readonly prompt?: ((ctx: AgentPromptContext) => string) | undefined;
-  readonly surfaceLabel?: ((ctx: HomesteadContext & { kind: "issue" | "pr" }) => string) | undefined;
+  readonly surfaceLabel?: ((ctx: SurfaceCtx) => string) | undefined;
 }
 
 export type TrackingContext = HomesteadContext & {
@@ -107,21 +115,18 @@ export interface HomesteadConfig {
   readonly agent?: AgentConfig;
   readonly issues?: IssuesConfig;
   readonly pr?: PrConfig;
-  readonly afterSetup?:
-    | ((ctx: WorktreeContext & { readonly plan: Plan }) => Effect.Effect<void, never, HomesteadServices>)
-    | undefined;
-  readonly afterLaunch?:
-    | ((ctx: HomesteadContext & { readonly paneId: string }) => Effect.Effect<void, never, HomesteadServices>)
-    | undefined;
+  // Lifecycle hooks return `unknown` — an Effect, a Promise (plain `async`, no
+  // `effect` import), or nothing. homestead normalizes the result (see
+  // normalizeHookResult in hooks.ts). The generated config types mirror this.
+  readonly afterSetup?: ((ctx: WorktreeContext & { readonly plan: Plan }) => unknown) | undefined;
+  readonly afterLaunch?: ((ctx: HomesteadContext & { readonly paneId: string }) => unknown) | undefined;
   readonly beforeTeardown?:
-    | ((ctx: HomesteadContext & { readonly verb: "kill" | "close" | "complete"; readonly tracked: boolean }) => Effect.Effect<void, never, HomesteadServices>)
+    | ((ctx: HomesteadContext & { readonly verb: "kill" | "close" | "complete"; readonly tracked: boolean }) => unknown)
     | undefined;
   readonly afterTeardown?:
-    | ((ctx: HomesteadContext & { readonly verb: "kill" | "close" | "complete"; readonly reviewLabel?: string }) => Effect.Effect<void, never, HomesteadServices>)
+    | ((ctx: HomesteadContext & { readonly verb: "kill" | "close" | "complete"; readonly reviewLabel?: string }) => unknown)
     | undefined;
-  readonly onEvent?:
-    | ((e: HomesteadEvent) => Effect.Effect<void, never, HomesteadServices>)
-    | undefined;
+  readonly onEvent?: ((e: HomesteadEvent) => unknown) | undefined;
 }
 
 export interface WorktreeOptions {

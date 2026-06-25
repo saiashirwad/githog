@@ -19,9 +19,11 @@ test("runAfterLaunch calls hook with paneId when present", async () => {
 });
 
 test("surfaceLabel default issue/pr", () => {
-  const issueCtx = { ...makeContext({ repoName: "r", slug: "s", branch: "b", worktreeDir: "/w", item: { number: 3, url: "u", title: "t" } as any }), kind: "issue" as const };
+  const item = { number: 3, url: "u", title: "t" } as any;
+  const issueCtx = { ...makeContext({ repoName: "r", slug: "s", branch: "b", worktreeDir: "/w", item }), kind: "issue" as const, item };
   expect(resolveSurfaceLabel(undefined, issueCtx)).toBe("issue-3");
-  const prCtx = { ...makeContext({ repoName: "r", slug: "s", branch: "b", worktreeDir: "/w", pr: { number: 9 } as any }), kind: "pr" as const };
+  const pr = { number: 9 } as any;
+  const prCtx = { ...makeContext({ repoName: "r", slug: "s", branch: "b", worktreeDir: "/w", pr }), kind: "pr" as const, pr };
   expect(resolveSurfaceLabel(undefined, prCtx)).toBe("pr-9");
   expect(resolveSurfaceLabel((c) => `x-${c.kind}`, prCtx)).toBe("x-pr");
 });

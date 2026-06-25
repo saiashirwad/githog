@@ -1,7 +1,7 @@
 import { Cause, Effect, Exit, FileSystem, Option, Path, Schema } from "effect";
 import { pathToFileURL } from "node:url";
 import { ConfigDataSchema } from "./config-schema.ts";
-import { mergeValidatedConfig, toConfigData } from "./config-strip.ts";
+import { toConfigData } from "./config-strip.ts";
 import { ConfigInvalid, ConfigNotFound } from "./errors.ts";
 import type { HomesteadConfig } from "./types.ts";
 
@@ -15,21 +15,30 @@ const defaultExport = (mod: unknown): HomesteadConfig | undefined => {
   return isConfigObject(mod.default) ? mod.default : undefined;
 };
 
+const applyDefaults = (config: HomesteadConfig): HomesteadConfig => ({
+  ...config,
+  ports: config.ports ?? [],
+  services: config.services ?? [],
+  setup: config.setup ?? [],
+});
+
 export const validateConfigShape = (config: HomesteadConfig): HomesteadConfig => {
-  const data = Schema.decodeUnknownSync(ConfigDataSchema)(toConfigData(config));
-  return mergeValidatedConfig(config, data);
+  // Decode purely for its validation side-effect (throws on invalid input).
+  Schema.decodeUnknownSync(ConfigDataSchema)(toConfigData(config));
+  return applyDefaults(config);
 };
 
 const decodeConfigData = Schema.decodeUnknownEffect(ConfigDataSchema);
 
 const validateConfigData = Effect.fn("homestead/validate-config")(function* (config: HomesteadConfig) {
-  const data = yield* decodeConfigData(toConfigData(config)).pipe(
+  // Decode purely for validation; discard the result and keep the original config.
+  yield* decodeConfigData(toConfigData(config)).pipe(
     Effect.catchTag(
       "SchemaError",
       (error) => new ConfigInvalid({ path: "homestead.config", reason: error.message }),
     ),
   );
-  return mergeValidatedConfig(config, data);
+  return applyDefaults(config);
 });
 
 export const loadConfigOrUndefined = Effect.fn("homestead/load-config-or-undefined")(function* (startDir: string) {

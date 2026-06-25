@@ -88,7 +88,11 @@ const printExportedTypeAlias = (entry: string, name: string): string => {
   const sym = findExport(entry, name);
   const decl = sym.declarations?.[0];
   const source = program.getSourceFile(entry)!;
-  if (decl !== undefined && ts.isTypeAliasDeclaration(decl)) {
+  // Only print the alias node verbatim when it's a literal union (e.g.
+  // HomesteadEvent) — those are self-contained. A `typeof X.Type` alias (e.g.
+  // PrView) would emit a reference to a name that doesn't exist in the output,
+  // so fall through to structural expansion via the checker.
+  if (decl !== undefined && ts.isTypeAliasDeclaration(decl) && ts.isUnionTypeNode(decl.type)) {
     const printer = ts.createPrinter({ removeComments: true });
     const printed = printer.printNode(ts.EmitHint.Unspecified, decl.type, source);
     return `export type ${name} = ${printed};`;
@@ -122,6 +126,10 @@ const NAMED = [
 const blocks = [
   printInterface("WorkItem"),
   printExportedTypeAlias(prResolveEntry, "PrView"),
+  // SurfaceCtx is a discriminated-union type alias referenced by AgentConfig's
+  // surfaceLabel signature; emit it explicitly (printInterface would flatten the
+  // union into a single interface and lose the discriminant narrowing).
+  printExportedTypeAlias(typesEntry, "SurfaceCtx"),
   ...NAMED.filter((n) => n !== "WorkItem").map((n) => printInterface(n)),
   printExportedTypeAlias(eventsEntry, "HomesteadEvent"),
   printInterface("HomesteadConfig", { effectFreeHooks: true }),

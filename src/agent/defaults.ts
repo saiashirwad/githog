@@ -1,3 +1,4 @@
+import { resolveCallable } from "../callable.ts";
 import type { HomesteadContext } from "../context.ts";
 import type { AgentConfig, AgentPromptContext } from "../types.ts";
 
@@ -9,7 +10,7 @@ export const DEFAULT_CLAUDE_TRUST_PROMPT = {
 } as const;
 
 export const defaultAgentPrompt = (ctx: AgentPromptContext): string => {
-  const item = ctx.item!;
+  const item = ctx.item;
   return (
     `This is the issue you need to implement:\n\n` +
     `#${item.number}: "${item.title}"\n${item.url}\n\n` +
@@ -26,10 +27,7 @@ export const resolveCommand = (
     | ((ctx: CommandContext) => ReadonlyArray<string>)
     | undefined,
   ctx: CommandContext,
-): ReadonlyArray<string> => {
-  if (typeof cfg === "function") return cfg(ctx);
-  return cfg ?? DEFAULT_AGENT_COMMAND;
-};
+): ReadonlyArray<string> => resolveCallable(cfg, ctx, DEFAULT_AGENT_COMMAND);
 
 export const resolveAgentDefaults = (agent: AgentConfig): AgentConfig & {
   readonly prompt: (ctx: AgentPromptContext) => string;

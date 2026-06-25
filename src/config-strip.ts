@@ -25,24 +25,19 @@ const pickDefined = <T extends object, K extends keyof T>(
   return result;
 };
 
-const mergeOptionalSection = <T extends object>(
-  original: T | undefined,
-  data: Partial<T> | undefined,
-  hooks: Partial<T>,
-): T | undefined => {
-  if (original === undefined && data === undefined) return undefined;
-  return { ...data, ...hooks } as T;
-};
+/** Agent fields whose data shape is a plain scalar (everything except `command`). */
+const AGENT_SCALAR_FIELDS = [
+  "surface",
+  "readyMarker",
+  "readyRegex",
+  "readyTimeoutMs",
+  "trustPrompt",
+] as const satisfies ReadonlyArray<Exclude<(typeof AGENT_DATA_FIELDS)[number], "command">>;
 
 /** Scalar subset of agent config that passes Schema decode (callbacks stripped). */
 export const stripAgentData = (agent: AgentConfig | undefined): AgentConfigData | undefined => {
   if (agent === undefined) return undefined;
-  const out = pickDefined(
-    agent,
-    AGENT_DATA_FIELDS.filter((key) => key !== "command") as ReadonlyArray<
-      Exclude<(typeof AGENT_DATA_FIELDS)[number], "command">
-    >,
-  );
+  const out = pickDefined(agent, AGENT_SCALAR_FIELDS);
   if (Array.isArray(agent.command)) {
     return { ...out, command: [...agent.command] };
   }
@@ -68,8 +63,8 @@ export const stripPrData = (pr: PrConfig | undefined): PrConfigData | undefined 
   return typeof pr.checks === "string" ? { checks: pr.checks } : {};
 };
 
-// Callable config values cannot pass Schema decode — strip them here and
-// re-attach the originals in mergeValidatedConfig.
+// Callable config values cannot pass Schema decode — strip them here so the
+// schema can validate the scalar shape.
 export const toConfigData = (config: HomesteadConfig): ConfigData => ({
   ports: config.ports?.map(({ key, base }) => ({
     key,
@@ -81,35 +76,4 @@ export const toConfigData = (config: HomesteadConfig): ConfigData => ({
   agent: stripAgentData(config.agent),
   issues: stripIssuesData(config.issues),
   pr: stripPrData(config.pr),
-});
-
-export const mergeValidatedConfig = (config: HomesteadConfig, data: ConfigData): HomesteadConfig => ({
-  ...config,
-  ports: config.ports ?? data.ports,
-  services: data.services,
-  setup: isFunction(config.setup) ? config.setup : data.setup,
-  env: mergeOptionalSection(config.env, data.env, { derive: config.env?.derive }),
-  agent: mergeOptionalSection(config.agent, data.agent, {
-    prompt: config.agent?.prompt,
-    surfaceLabel: config.agent?.surfaceLabel,
-    command: config.agent?.command ?? data.agent?.command,
-  }),
-  issues: mergeOptionalSection(config.issues, data.issues, {
-    branch: config.issues?.branch,
-    comment: config.issues?.comment ?? data.issues?.comment,
-    stopComment: config.issues?.stopComment,
-    reviewComment: config.issues?.reviewComment,
-    closeComment: config.issues?.closeComment,
-    closeReason: config.issues?.closeReason,
-    label: config.issues?.label ?? data.issues?.label,
-    reviewLabel: config.issues?.reviewLabel ?? data.issues?.reviewLabel,
-    assign: config.issues?.assign ?? data.issues?.assign,
-    labelColor: config.issues?.labelColor ?? data.issues?.labelColor,
-  }),
-  pr: mergeOptionalSection(config.pr, data.pr, {
-    reviewPrompt: config.pr?.reviewPrompt,
-    workPrompt: config.pr?.workPrompt,
-    prBranch: config.pr?.prBranch,
-    checks: config.pr?.checks ?? data.pr?.checks,
-  }),
 });

@@ -15,15 +15,7 @@ export interface WorkItem {
   readonly title: string;
 }
 
-export type PrView = { readonly number: number; readonly title: string; readonly url: string; readonly headRefName: string; readonly baseRefName: string; readonly isCrossRepository: boolean; };
-
-export type SurfaceCtx = (HomesteadContext & {
-    readonly kind: "issue";
-    readonly item: WorkItem;
-}) | (HomesteadContext & {
-    readonly kind: "pr";
-    readonly pr: PrView;
-});
+export type PrView = typeof PrViewSchema.Type;
 
 export interface HomesteadContext {
   readonly repoName: string;
@@ -73,7 +65,7 @@ export interface AgentPromptContext {
   readonly slug: string;
   readonly branch: string;
   readonly worktreeDir: string;
-  readonly item: { readonly number: number; readonly url: string; readonly title: string; };
+  readonly item?: { readonly number: number; readonly url: string; readonly title: string; } | undefined;
   readonly pr?: { readonly number: number; readonly title: string; readonly url: string; readonly headRefName: string; readonly baseRefName: string; readonly isCrossRepository: boolean; } | undefined;
   readonly env: (key: string) => string | undefined;
   readonly args: ReadonlyArray<string>;
@@ -116,7 +108,7 @@ export interface EnvConfig {
 export interface AgentConfig {
   readonly command?: ReadonlyArray<string> | ((ctx: HomesteadContext & { args: ReadonlyArray<string>; }) => ReadonlyArray<string>) | undefined;
   readonly prompt?: ((ctx: AgentPromptContext) => string) | undefined;
-  readonly surfaceLabel?: ((ctx: SurfaceCtx) => string) | undefined;
+  readonly surfaceLabel?: ((ctx: HomesteadContext & { kind: "issue" | "pr"; }) => string) | undefined;
   readonly surface?: "worktree" | "tab" | "workspace" | undefined;
   readonly readyMarker?: string | undefined;
   readonly readyRegex?: boolean | undefined;

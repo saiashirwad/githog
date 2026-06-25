@@ -2,6 +2,7 @@ import { Cause, Console, Effect, FileSystem, Option, Path, Schema } from "effect
 import * as os from "node:os";
 import { runExit } from "./process.ts";
 import { slugify } from "./text.ts";
+import { resolveCallable } from "./callable.ts";
 import { makeContext, type HomesteadContext } from "./context.ts";
 import type { HomesteadServices, IssuesConfig, TrackingContext, WorkItem } from "./types.ts";
 
@@ -20,12 +21,12 @@ export type TrackingState = typeof TrackingStateSchema.Type;
 export const resolveCloseReason = (
   cfg: "completed" | "not planned" | ((ctx: HomesteadContext) => "completed" | "not planned") | undefined,
   ctx: HomesteadContext,
-): "completed" | "not planned" => (typeof cfg === "function" ? cfg(ctx) : (cfg ?? "completed"));
+): "completed" | "not planned" => resolveCallable(cfg, ctx, "completed");
 
 export const resolveLabelColor = (
   cfg: string | ((ctx: { label: string; kind: "wip" | "review" }) => string) | undefined,
   ctx: { label: string; kind: "wip" | "review" },
-): string => (typeof cfg === "function" ? cfg(ctx) : (cfg ?? "1D76DB"));
+): string => resolveCallable(cfg, ctx, "1D76DB");
 
 export const resolveLabel = (
   cfg: string | ((item: WorkItem) => string) | undefined,

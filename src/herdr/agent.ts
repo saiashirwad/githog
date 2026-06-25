@@ -6,23 +6,21 @@ import type {
   AgentConfig,
   AgentPromptContext,
   HomesteadConfig,
-  HomesteadContext,
   HomesteadServices,
   Plan,
+  SurfaceCtx,
   WorkItem,
 } from "../types.ts";
 import { resolveCommand } from "../agent/defaults.ts";
 import { Herdr } from "./service.ts";
 import { launchAndSeed, toSpec } from "./launch.ts";
 
-type SurfaceCtx = HomesteadContext & { readonly kind: "issue" | "pr" };
-
 export const resolveSurfaceLabel = (
   cfg: ((ctx: SurfaceCtx) => string) | undefined,
   ctx: SurfaceCtx,
 ): string => {
   if (cfg !== undefined) return cfg(ctx);
-  return ctx.kind === "issue" ? `issue-${ctx.item!.number}` : `pr-${ctx.pr!.number}`;
+  return ctx.kind === "issue" ? `issue-${ctx.item.number}` : `pr-${ctx.pr.number}`;
 };
 
 export interface LaunchAgentInput {
@@ -52,9 +50,10 @@ export const launchAgent = Effect.fn("homestead/launch-agent")(function* (input:
   const paneId = yield* herdr.createSurface(surface, plan.targetDir, resolveSurfaceLabel(agent.surfaceLabel, {
     ...baseCtx,
     kind: "issue",
+    item,
   }));
 
-  const prompt = agent.prompt({ ...baseCtx, args });
+  const prompt = agent.prompt({ ...baseCtx, item, args });
   yield* launchAndSeed(paneId, spec, prompt, { readyTimeoutMs: agent.readyTimeoutMs });
   yield* runAfterLaunch(input.config.afterLaunch, baseCtx, paneId);
 

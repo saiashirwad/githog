@@ -64,7 +64,7 @@ export const launchPr = Effect.fn("homestead/launch-pr")(function* (input: Launc
   const paneId = yield* herdr.createSurface(
     surface,
     plan.targetDir,
-    resolveSurfaceLabel(agent.surfaceLabel, { ...baseCtx, kind: "pr" }),
+    resolveSurfaceLabel(agent.surfaceLabel, { ...baseCtx, kind: "pr", pr }),
   );
   yield* launchAndSeed(
     paneId,

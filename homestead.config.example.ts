@@ -49,7 +49,12 @@ export default {
 
   // Ensure the shared docker Postgres is up before provisioning.
   services: [
-    { name: "postgres", host: "localhost", port: 5432, start: ["docker", "compose", "up", "-d", "db"] },
+    {
+      name: "postgres",
+      host: "localhost",
+      port: 5432,
+      start: ["docker", "compose", "up", "-d", "db"],
+    },
   ],
 
   // Ordered setup commands. DATABASE_URL is injected so it wins over any value a
@@ -71,6 +76,7 @@ export default {
     assign: true, // assign the gh user (@me) on launch, unassign on kill
     comment: true, // post a 🤖 start comment + 🛑 stop comment (or a function for custom text)
     reviewLabel: "agent:review", // `close` moves agent:wip here (default)
+    closeComment: ({ branch, env, host }) => `${branch} was closed`,
   },
 
   // homestead boots an interactive agent in a herdr pane per issue, waits for its
