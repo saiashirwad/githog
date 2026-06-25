@@ -73,6 +73,8 @@ const mergeValidatedConfig = (config: HomesteadConfig, data: ConfigData): Homest
     branch: config.issues?.branch,
     comment: config.issues?.comment ?? data.issues?.comment,
     stopComment: config.issues?.stopComment,
+    reviewComment: config.issues?.reviewComment,
+    closeComment: config.issues?.closeComment,
   }),
   pr: mergeOptionalSection(config.pr, data.pr, {
     reviewPrompt: config.pr?.reviewPrompt,

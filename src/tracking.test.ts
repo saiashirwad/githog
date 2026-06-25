@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Effect, Schema } from "effect";
-import { resolveStopComment, TrackingStateSchema } from "./tracking.ts";
+import { resolveCloseComment, resolveReviewComment, resolveStopComment, TrackingStateSchema } from "./tracking.ts";
 
 test("TrackingState decodes legacy state without title/worktreeDir", () => {
   const decode = Schema.decodeUnknownSync(TrackingStateSchema);
@@ -45,4 +45,19 @@ test("resolveStopComment false suppresses", () => {
 test("resolveStopComment function form wins", () => {
   const body = resolveStopComment((c: any) => `bye ${c.branch}`, { branch: "feat-x", host: "mac" } as any);
   expect(body).toBe("bye feat-x");
+});
+
+test("review/close comments default to undefined (off)", () => {
+  expect(resolveReviewComment(undefined, { branch: "b", host: "h" } as any)).toBeUndefined();
+  expect(resolveCloseComment(undefined, { branch: "b", host: "h" } as any)).toBeUndefined();
+});
+
+test("review/close comments true uses default body", () => {
+  expect(resolveReviewComment(true, { branch: "b", host: "h" } as any)).toBe("homestead: `b` moved to review (h)");
+  expect(resolveCloseComment(true, { branch: "b", host: "h" } as any)).toBe("homestead: `b` completed (h)");
+});
+
+test("review/close comments function form wins", () => {
+  expect(resolveReviewComment((c: any) => `r ${c.branch}`, { branch: "b" } as any)).toBe("r b");
+  expect(resolveCloseComment((c: any) => `c ${c.branch}`, { branch: "b" } as any)).toBe("c b");
 });

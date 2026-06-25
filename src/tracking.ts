@@ -41,6 +41,24 @@ export const resolveStopComment = (
   return `homestead: agent stopped on \`${ctx.branch}\` (${ctx.host})`;
 };
 
+export const resolveReviewComment = (
+  cfg: boolean | ((ctx: StopCtx) => string) | undefined,
+  ctx: StopCtx,
+): string | undefined => {
+  if (cfg === undefined || cfg === false) return undefined;
+  if (typeof cfg === "function") return cfg(ctx);
+  return `homestead: \`${ctx.branch}\` moved to review (${ctx.host})`;
+};
+
+export const resolveCloseComment = (
+  cfg: boolean | ((ctx: StopCtx) => string) | undefined,
+  ctx: StopCtx,
+): string | undefined => {
+  if (cfg === undefined || cfg === false) return undefined;
+  if (typeof cfg === "function") return cfg(ctx);
+  return `homestead: \`${ctx.branch}\` completed (${ctx.host})`;
+};
+
 export const loadTrackingState = Effect.fn("homestead/load-tracking-state")(function* (
   repoName: string,
   branch: string,
@@ -166,6 +184,7 @@ export const markFinished = Effect.fn("homestead/mark-finished")(function* (
   repoName: string,
   branch: string,
   reviewLabel: string,
+  issues?: IssuesConfig,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -175,10 +194,26 @@ export const markFinished = Effect.fn("homestead/mark-finished")(function* (
   if (Option.isNone(state)) return;
 
   const ref = String(state.value.number);
+  const host = os.hostname();
   if (state.value.label !== undefined) {
     yield* gh("gh label create", ["label", "create", reviewLabel, "--color", LABEL_COLOR, "--force"]);
     yield* gh("gh issue edit --add-label", ["issue", "edit", ref, "--add-label", reviewLabel]);
     yield* gh("gh issue edit --remove-label", ["issue", "edit", ref, "--remove-label", state.value.label]);
+  }
+  const ctx: StopCtx = {
+    repoName,
+    slug: branch,
+    branch,
+    worktreeDir: state.value.worktreeDir ?? "",
+    env: () => undefined,
+    host,
+    ...(state.value.title !== undefined
+      ? { item: { number: state.value.number, url: state.value.url, title: state.value.title } }
+      : {}),
+  };
+  const reviewBody = resolveReviewComment(issues?.reviewComment, ctx);
+  if (reviewBody !== undefined) {
+    yield* gh("gh issue comment", ["issue", "comment", ref, "--body", reviewBody]);
   }
   yield* fs.remove(file).pipe(Effect.orElseSucceed(() => undefined));
 });
@@ -189,6 +224,7 @@ export const markFinished = Effect.fn("homestead/mark-finished")(function* (
 export const markCompleted = Effect.fn("homestead/mark-completed")(function* (
   repoName: string,
   branch: string,
+  issues?: IssuesConfig,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -204,6 +240,23 @@ export const markCompleted = Effect.fn("homestead/mark-completed")(function* (
   if (ref === undefined) {
     yield* Console.log(`  (no issue associated with '${branch}' — skipping issue close)`);
     return;
+  }
+
+  const host = os.hostname();
+  const ctx: StopCtx = {
+    repoName,
+    slug: branch,
+    branch,
+    worktreeDir: Option.isSome(state) ? (state.value.worktreeDir ?? "") : "",
+    env: () => undefined,
+    host,
+    ...(Option.isSome(state) && state.value.title !== undefined
+      ? { item: { number: state.value.number, url: state.value.url, title: state.value.title } }
+      : {}),
+  };
+  const closeBody = resolveCloseComment(issues?.closeComment, ctx);
+  if (closeBody !== undefined) {
+    yield* gh("gh issue comment", ["issue", "comment", ref, "--body", closeBody]);
   }
 
   yield* gh("gh issue close", ["issue", "close", ref, "--reason", "completed"]);

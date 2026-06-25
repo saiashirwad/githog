@@ -69,6 +69,8 @@ export interface IssuesConfig extends Omit<IssuesConfigData, "comment"> {
   readonly branch?: ((item: WorkItem) => string) | undefined;
   readonly comment?: boolean | ((ctx: TrackingContext) => string);
   readonly stopComment?: boolean | ((ctx: HomesteadContext & { host: string }) => string);
+  readonly reviewComment?: boolean | ((ctx: HomesteadContext & { host: string }) => string);
+  readonly closeComment?: boolean | ((ctx: HomesteadContext & { host: string }) => string);
 }
 
 export interface PrPromptContext {
