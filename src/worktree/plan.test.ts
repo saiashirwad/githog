@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test";
+import { makeContext } from "../context.ts";
 import {
   collectUsedPorts,
   computePortEdits,
   resolvePortBase,
 } from "./plan.ts";
 
-const portCtx = { repoName: "app", slug: "feat", branch: "feat/x", worktreeDir: "/wt", env: () => undefined } as const;
+const portCtx = makeContext({ repoName: "app", slug: "feat", branch: "feat/x", worktreeDir: "/wt" });
 
 test("collectUsedPorts gathers integer port values from sibling env files", () => {
   const ports = [

@@ -66,7 +66,10 @@ export const launchAgent = Effect.fn("homestead/launch-agent")(function* (input:
     }),
   );
 
-  const prompt = agent.prompt({ item, branch, worktreeDir: plan.targetDir, repoName, args });
+  const prompt = agent.prompt({
+    ...makeContext({ repoName, slug: plan.slug, branch, worktreeDir: plan.targetDir, item }),
+    args,
+  });
 
   yield* launchAndSeed(paneId, spec, prompt, { readyTimeoutMs: agent.readyTimeoutMs });
 

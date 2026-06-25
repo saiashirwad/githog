@@ -8,11 +8,15 @@ export const DEFAULT_CLAUDE_TRUST_PROMPT = {
   confirm: ["Enter"],
 } as const;
 
-export const defaultAgentPrompt = (ctx: AgentPromptContext): string =>
-  `This is the issue you need to implement:\n\n` +
-  `#${ctx.item.number}: "${ctx.item.title}"\n${ctx.item.url}\n\n` +
-  `Read the issue carefully and explore this worktree until you understand exactly what needs to be done. ` +
-  `Then show me your plan before you start implementing.`;
+export const defaultAgentPrompt = (ctx: AgentPromptContext): string => {
+  const item = ctx.item!;
+  return (
+    `This is the issue you need to implement:\n\n` +
+    `#${item.number}: "${item.title}"\n${item.url}\n\n` +
+    `Read the issue carefully and explore this worktree until you understand exactly what needs to be done. ` +
+    `Then show me your plan before you start implementing.`
+  );
+};
 
 export type CommandContext = HomesteadContext & { readonly args: ReadonlyArray<string> };
 

@@ -39,26 +39,18 @@ export type HomesteadServices =
   | ChildProcessSpawner.ChildProcessSpawner
   | Herdr;
 
-export interface WorktreeContext {
-  readonly slug: string;
-  readonly branch: string;
+export type WorktreeContext = HomesteadContext & {
   readonly targetDir: string;
   readonly primaryRoot: string;
-  readonly repoName: string;
-  readonly env: (key: string) => string | undefined;
-}
+};
 
 export interface EnvConfig extends EnvConfigData {
   readonly derive?: ((ctx: WorktreeContext) => Record<string, string>) | undefined;
 }
 
-export interface AgentPromptContext {
-  readonly item: WorkItem;
-  readonly branch: string;
-  readonly worktreeDir: string;
-  readonly repoName: string;
+export type AgentPromptContext = HomesteadContext & {
   readonly args: ReadonlyArray<string>;
-}
+};
 
 export interface AgentConfig extends Omit<AgentConfigData, "command"> {
   readonly command?:
@@ -69,11 +61,9 @@ export interface AgentConfig extends Omit<AgentConfigData, "command"> {
   readonly surfaceLabel?: ((ctx: HomesteadContext & { kind: "issue" | "pr" }) => string) | undefined;
 }
 
-export interface TrackingContext extends WorkItem {
-  readonly branch: string;
-  readonly worktreeDir: string;
+export type TrackingContext = HomesteadContext & {
   readonly host: string;
-}
+};
 
 export interface IssuesConfig extends Omit<IssuesConfigData, "comment" | "labelColor" | "label" | "reviewLabel" | "assign"> {
   readonly label?: string | ((item: WorkItem) => string) | undefined;
@@ -105,9 +95,8 @@ export interface PrConfig extends Omit<PrConfigData, "checks"> {
 }
 
 export interface HomesteadConfig {
-  readonly worktreeDir?:
-    | ((ctx: { readonly repoName: string; readonly slug: string; readonly branch: string }) => string)
-    | undefined;
+  /** `ctx.worktreeDir` is always empty inside this callback — the path is what you're defining. */
+  readonly worktreeDir?: ((ctx: HomesteadContext) => string) | undefined;
   readonly ports?: ReadonlyArray<PortSpec>;
   readonly env?: EnvConfig;
   readonly services?: ReadonlyArray<ServiceSpec>;

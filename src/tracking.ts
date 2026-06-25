@@ -2,7 +2,7 @@ import { Cause, Console, Effect, FileSystem, Option, Path, Schema } from "effect
 import * as os from "node:os";
 import { runExit } from "./process.ts";
 import { slugify } from "./text.ts";
-import type { HomesteadContext } from "./context.ts";
+import { makeContext, type HomesteadContext } from "./context.ts";
 import type { HomesteadServices, IssuesConfig, TrackingContext, WorkItem } from "./types.ts";
 
 export const TrackingStateSchema = Schema.Struct({
@@ -146,7 +146,10 @@ export const markStarted = Effect.fn("homestead/mark-started")(function* (
   }
   let commented = false;
   if (wantComment) {
-    const ctx: TrackingContext = { number: item.number, url: item.url, title: item.title, branch, worktreeDir, host };
+    const ctx: TrackingContext = {
+      ...makeContext({ repoName, slug: branch, branch, worktreeDir, item }),
+      host,
+    };
     const body =
       typeof issues.comment === "function"
         ? issues.comment(ctx)
@@ -204,15 +207,16 @@ export const markStopped = Effect.fn("homestead/mark-stopped")(function* (
   }
   if (state.value.commented === true) {
     const ctx: StopCtx = {
-      repoName,
-      slug: branch,
-      branch,
-      worktreeDir: state.value.worktreeDir ?? "",
-      env: () => undefined,
+      ...makeContext({
+        repoName,
+        slug: branch,
+        branch,
+        worktreeDir: state.value.worktreeDir ?? "",
+        ...(state.value.title !== undefined
+          ? { item: { number: state.value.number, url: state.value.url, title: state.value.title } }
+          : {}),
+      }),
       host,
-      ...(state.value.title !== undefined
-        ? { item: { number: state.value.number, url: state.value.url, title: state.value.title } }
-        : {}),
     };
     const body = resolveStopComment(issues?.stopComment, ctx);
     if (body !== undefined) {
@@ -256,15 +260,16 @@ export const markFinished = Effect.fn("homestead/mark-finished")(function* (
     yield* gh("gh issue edit --remove-label", ["issue", "edit", ref, "--remove-label", state.value.label]);
   }
   const ctx: StopCtx = {
-    repoName,
-    slug: branch,
-    branch,
-    worktreeDir: state.value.worktreeDir ?? "",
-    env: () => undefined,
+    ...makeContext({
+      repoName,
+      slug: branch,
+      branch,
+      worktreeDir: state.value.worktreeDir ?? "",
+      ...(state.value.title !== undefined
+        ? { item: { number: state.value.number, url: state.value.url, title: state.value.title } }
+        : {}),
+    }),
     host,
-    ...(state.value.title !== undefined
-      ? { item: { number: state.value.number, url: state.value.url, title: state.value.title } }
-      : {}),
   };
   const reviewBody = resolveReviewComment(issues?.reviewComment, ctx);
   if (reviewBody !== undefined) {
@@ -299,15 +304,16 @@ export const markCompleted = Effect.fn("homestead/mark-completed")(function* (
 
   const host = os.hostname();
   const ctx: StopCtx = {
-    repoName,
-    slug: branch,
-    branch,
-    worktreeDir: Option.isSome(state) ? (state.value.worktreeDir ?? "") : "",
-    env: () => undefined,
+    ...makeContext({
+      repoName,
+      slug: branch,
+      branch,
+      worktreeDir: Option.isSome(state) ? (state.value.worktreeDir ?? "") : "",
+      ...(Option.isSome(state) && state.value.title !== undefined
+        ? { item: { number: state.value.number, url: state.value.url, title: state.value.title } }
+        : {}),
+    }),
     host,
-    ...(Option.isSome(state) && state.value.title !== undefined
-      ? { item: { number: state.value.number, url: state.value.url, title: state.value.title } }
-      : {}),
   };
   const closeBody = resolveCloseComment(issues?.closeComment, ctx);
   if (closeBody !== undefined) {

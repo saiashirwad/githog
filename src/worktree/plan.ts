@@ -31,12 +31,15 @@ export const makeWorktreeContext = (
   target: Target,
   sourceContent: string,
 ): WorktreeContext => ({
-  slug: target.slug,
-  branch: target.branch,
+  ...makeContext({
+    repoName: repo.repoName,
+    slug: target.slug,
+    branch: target.branch,
+    worktreeDir: target.targetDir,
+    env: (key) => readEnvVar(sourceContent, key),
+  }),
   targetDir: target.targetDir,
   primaryRoot: repo.primaryRoot,
-  repoName: repo.repoName,
-  env: (key) => readEnvVar(sourceContent, key),
 });
 
 export const resolveTargetDir = (input: {
@@ -50,7 +53,9 @@ export const resolveTargetDir = (input: {
   const { dirFlag, config, repoName, slug, branch, path } = input;
   if (dirFlag !== undefined) return path.resolve(dirFlag);
   if (config.worktreeDir !== undefined) {
-    return path.resolve(config.worktreeDir({ repoName, slug, branch }));
+    return path.resolve(
+      config.worktreeDir(makeContext({ repoName, slug, branch, worktreeDir: "" })),
+    );
   }
   return path.join(os.homedir(), "worktrees", repoName, slug);
 };

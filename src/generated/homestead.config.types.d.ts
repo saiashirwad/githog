@@ -37,29 +37,37 @@ export interface WorkItem {
 }
 
 export interface WorktreeContext {
+  readonly repoName: string;
   readonly slug: string;
   readonly branch: string;
+  readonly worktreeDir: string;
+  readonly item?: { readonly number: number; readonly url: string; readonly title: string; } | undefined;
+  readonly pr?: { readonly number: number; readonly title: string; readonly url: string; readonly headRefName: string; readonly baseRefName: string; readonly isCrossRepository: boolean; } | undefined;
+  readonly env: (key: string) => string | undefined;
   readonly targetDir: string;
   readonly primaryRoot: string;
-  readonly repoName: string;
-  readonly env: (key: string) => string | undefined;
 }
 
 export interface AgentPromptContext {
-  readonly item: { readonly number: number; readonly url: string; readonly title: string; };
+  readonly repoName: string;
+  readonly slug: string;
   readonly branch: string;
   readonly worktreeDir: string;
-  readonly repoName: string;
+  readonly item?: { readonly number: number; readonly url: string; readonly title: string; } | undefined;
+  readonly pr?: { readonly number: number; readonly title: string; readonly url: string; readonly headRefName: string; readonly baseRefName: string; readonly isCrossRepository: boolean; } | undefined;
+  readonly env: (key: string) => string | undefined;
   readonly args: ReadonlyArray<string>;
 }
 
 export interface TrackingContext {
+  readonly repoName: string;
+  readonly slug: string;
   readonly branch: string;
   readonly worktreeDir: string;
+  readonly item?: { readonly number: number; readonly url: string; readonly title: string; } | undefined;
+  readonly pr?: { readonly number: number; readonly title: string; readonly url: string; readonly headRefName: string; readonly baseRefName: string; readonly isCrossRepository: boolean; } | undefined;
+  readonly env: (key: string) => string | undefined;
   readonly host: string;
-  readonly number: number;
-  readonly url: string;
-  readonly title: string;
 }
 
 export interface PrPromptContext {
@@ -117,7 +125,7 @@ export interface PrConfig {
 }
 
 export interface HomesteadConfig {
-  readonly worktreeDir?: ((ctx: { readonly repoName: string; readonly slug: string; readonly branch: string; }) => string) | undefined;
+  readonly worktreeDir?: ((ctx: HomesteadContext) => string) | undefined;
   readonly ports?: ReadonlyArray<PortSpec> | undefined;
   readonly env?: EnvConfig | undefined;
   readonly services?: ReadonlyArray<{ readonly name: string; readonly host: string; readonly port: number; readonly start?: ReadonlyArray<string> | undefined; readonly timeoutMs?: number | undefined; }> | undefined;
