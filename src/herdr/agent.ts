@@ -10,6 +10,7 @@ import type {
   Plan,
   WorkItem,
 } from "../types.ts";
+import { resolveCommand } from "../agent/defaults.ts";
 import { Herdr } from "./service.ts";
 import { launchAndSeed, toSpec } from "./launch.ts";
 
@@ -42,7 +43,11 @@ export interface LaunchAgentInput {
 
 export const launchAgent = Effect.fn("homestead/launch-agent")(function* (input: LaunchAgentInput) {
   const { plan, item, branch, repoName, agent, args = [] } = input;
-  const spec = toSpec(agent);
+  const commandCtx = {
+    ...makeContext({ repoName, slug: plan.slug, branch, worktreeDir: plan.targetDir, item }),
+    args,
+  };
+  const spec = toSpec({ ...agent, command: resolveCommand(agent.command, commandCtx) });
   const surface = agent.surface ?? "worktree";
   const herdr = yield* Herdr;
 

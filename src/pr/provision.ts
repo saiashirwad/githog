@@ -3,6 +3,7 @@ import { makeContext } from "../context.ts";
 import { emit } from "../events.ts";
 import { UsageError } from "../errors.ts";
 import { Herdr } from "../herdr/service.ts";
+import { resolveCommand } from "../agent/defaults.ts";
 import { launchAndSeed, toSpec } from "../herdr/launch.ts";
 import { resolveSurfaceLabel } from "../herdr/agent.ts";
 import type { AgentConfig, HomesteadConfig } from "../types.ts";
@@ -66,7 +67,22 @@ export const launchPr = Effect.fn("homestead/launch-pr")(function* (input: Launc
       kind: "pr",
     }),
   );
-  yield* launchAndSeed(paneId, toSpec(agent), prompt, { readyTimeoutMs: agent.readyTimeoutMs });
+  const commandCtx = {
+    ...makeContext({
+      repoName: repo.repoName,
+      slug: plan.slug,
+      branch: checkout.branch,
+      worktreeDir: plan.targetDir,
+      pr,
+    }),
+    args: [] as const,
+  };
+  yield* launchAndSeed(
+    paneId,
+    toSpec({ ...agent, command: resolveCommand(agent.command, commandCtx) }),
+    prompt,
+    { readyTimeoutMs: agent.readyTimeoutMs },
+  );
 
   yield* emit(config.onEvent, {
     type: "pr.launched",

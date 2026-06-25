@@ -1,3 +1,4 @@
+import type { HomesteadContext } from "../context.ts";
 import type { AgentConfig, AgentPromptContext } from "../types.ts";
 
 export const DEFAULT_AGENT_COMMAND = ["claude"] as const;
@@ -13,12 +14,25 @@ export const defaultAgentPrompt = (ctx: AgentPromptContext): string =>
   `Read the issue carefully and explore this worktree until you understand exactly what needs to be done. ` +
   `Then show me your plan before you start implementing.`;
 
+export type CommandContext = HomesteadContext & { readonly args: ReadonlyArray<string> };
+
+export const resolveCommand = (
+  cfg:
+    | ReadonlyArray<string>
+    | ((ctx: CommandContext) => ReadonlyArray<string>)
+    | undefined,
+  ctx: CommandContext,
+): ReadonlyArray<string> => {
+  if (typeof cfg === "function") return cfg(ctx);
+  return cfg ?? DEFAULT_AGENT_COMMAND;
+};
+
 export const resolveAgentDefaults = (agent: AgentConfig): AgentConfig & {
-  readonly command: ReadonlyArray<string>;
   readonly prompt: (ctx: AgentPromptContext) => string;
 } => {
-  const command = agent.command ?? DEFAULT_AGENT_COMMAND;
-  const binary = command[0] ?? "claude";
+  const command = agent.command;
+  const binary =
+    typeof command === "function" ? "claude" : (command ?? DEFAULT_AGENT_COMMAND)[0] ?? "claude";
   const trustPrompt =
     agent.trustPrompt !== undefined
       ? agent.trustPrompt
@@ -28,7 +42,7 @@ export const resolveAgentDefaults = (agent: AgentConfig): AgentConfig & {
 
   return {
     ...agent,
-    command,
+    command: typeof command === "function" ? command : (command ?? DEFAULT_AGENT_COMMAND),
     trustPrompt,
     prompt: agent.prompt ?? defaultAgentPrompt,
   };

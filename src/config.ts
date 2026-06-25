@@ -46,8 +46,13 @@ const toConfigData = (config: HomesteadConfig): ConfigData => ({
     config.agent === undefined
       ? undefined
       : {
-          ...pickDefined(config.agent, AGENT_DATA_FIELDS),
-          ...(config.agent.command !== undefined && { command: [...config.agent.command] }),
+          ...pickDefined(
+            config.agent,
+            AGENT_DATA_FIELDS.filter((key) => key !== "command") as ReadonlyArray<
+              Exclude<(typeof AGENT_DATA_FIELDS)[number], "command">
+            >,
+          ),
+          ...(Array.isArray(config.agent.command) ? { command: [...config.agent.command] } : {}),
         },
   issues:
     config.issues === undefined
@@ -76,6 +81,7 @@ const mergeValidatedConfig = (config: HomesteadConfig, data: ConfigData): Homest
   agent: mergeOptionalSection(config.agent, data.agent, {
     prompt: config.agent?.prompt,
     surfaceLabel: config.agent?.surfaceLabel,
+    command: config.agent?.command ?? data.agent?.command,
   }),
   issues: mergeOptionalSection(config.issues, data.issues, {
     branch: config.issues?.branch,

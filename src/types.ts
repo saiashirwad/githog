@@ -57,7 +57,11 @@ export interface AgentPromptContext {
   readonly args: ReadonlyArray<string>;
 }
 
-export interface AgentConfig extends AgentConfigData {
+export interface AgentConfig extends Omit<AgentConfigData, "command"> {
+  readonly command?:
+    | ReadonlyArray<string>
+    | ((ctx: HomesteadContext & { args: ReadonlyArray<string> }) => ReadonlyArray<string>)
+    | undefined;
   readonly prompt?: ((ctx: AgentPromptContext) => string) | undefined;
   readonly surfaceLabel?: ((ctx: HomesteadContext & { kind: "issue" | "pr" }) => string) | undefined;
 }
