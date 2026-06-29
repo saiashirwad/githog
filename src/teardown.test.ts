@@ -1,12 +1,125 @@
-import { expect, test } from "bun:test";
-import { BunServices } from "@effect/platform-bun";
+import { expect, spyOn, test } from "bun:test";
+import { BunFileSystem, BunPath, BunServices } from "@effect/platform-bun";
 import { Effect, Layer } from "effect";
+import { ChildProcessSpawner } from "effect/unstable/process";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import * as os from "node:os";
+import * as nodePath from "node:path";
 import { emit, teardownEvents, type HomesteadEvent } from "./events.ts";
 import { runAfterTeardown, runBeforeTeardown } from "./hooks.ts";
 import { makeContext } from "./context.ts";
 import { HerdrTest } from "./herdr/test.ts";
+import { completeBranch } from "./teardown.ts";
+import { markCompleted, markFinished, markStopped } from "./tracking.ts";
+import { slugify } from "./text.ts";
 
 const TestLayer = Layer.provideMerge(HerdrTest, BunServices.layer);
+
+// A spawner that records every command instead of running it — lets a test
+// assert which subprocesses (git/gh) a teardown path did or did NOT invoke.
+const recordingSpawner = (calls: Array<Array<string>>) =>
+  Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, {
+    exitCode: (cmd: { command: string; args: ReadonlyArray<string> }) =>
+      Effect.sync(() => {
+        calls.push([cmd.command, ...cmd.args]);
+        return 0;
+      }),
+    string: (cmd: { command: string; args: ReadonlyArray<string> }) =>
+      Effect.sync(() => {
+        calls.push([cmd.command, ...cmd.args]);
+        return "";
+      }),
+  } as unknown as ChildProcessSpawner.ChildProcessSpawner["Service"]);
+
+const baseLayer = (calls: Array<Array<string>>) =>
+  Layer.mergeAll(BunFileSystem.layer, BunPath.layer, recordingSpawner(calls));
+
+// Stand up a fake ~/.homestead by pointing os.homedir() at a temp dir, then run
+// `f`. (Bun caches os.homedir(), so a runtime $HOME change is ignored — spy it.)
+const withHomestead = async (
+  repoName: string,
+  branch: string,
+  stateJson: string | undefined,
+  f: (paths: { primaryRoot: string; stateFile: string }) => Promise<void>,
+) => {
+  const home = mkdtempSync(nodePath.join(os.tmpdir(), "homestead-home-"));
+  const spy = spyOn(os, "homedir").mockReturnValue(home);
+  try {
+    const dir = nodePath.join(home, ".homestead", "state", slugify(repoName));
+    const stateFile = nodePath.join(dir, `${slugify(branch)}.json`);
+    if (stateJson !== undefined) {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(stateFile, stateJson);
+    }
+    await f({ primaryRoot: home, stateFile });
+  } finally {
+    spy.mockRestore();
+    rmSync(home, { recursive: true, force: true });
+  }
+};
+
+const spawnStateJson = JSON.stringify({
+  kind: "spawn",
+  worktreeDir: "/tmp/wt",
+  spawn: { spawnedBy: "agent spawn", paneId: "pane_1", spawnedAt: "2026-06-29T00:00:00.000Z" },
+});
+
+const ghCalls = (calls: Array<Array<string>>) => calls.filter((c) => c[0] === "gh");
+
+test("markStopped on spawn state deletes the file and issues no gh calls", async () => {
+  await withHomestead("r", "spawn-x", spawnStateJson, async ({ stateFile }) => {
+    const calls: Array<Array<string>> = [];
+    await Effect.runPromise(markStopped("r", "spawn-x").pipe(Effect.provide(baseLayer(calls))));
+    expect(existsSync(stateFile)).toBe(false);
+    expect(ghCalls(calls)).toEqual([]);
+  });
+});
+
+test("markCompleted on spawn state deletes the file and issues no gh calls", async () => {
+  await withHomestead("r", "spawn-x", spawnStateJson, async ({ stateFile }) => {
+    const calls: Array<Array<string>> = [];
+    await Effect.runPromise(markCompleted("r", "spawn-x").pipe(Effect.provide(baseLayer(calls))));
+    expect(existsSync(stateFile)).toBe(false);
+    expect(ghCalls(calls)).toEqual([]);
+  });
+});
+
+test("markFinished on spawn state deletes the file and issues no gh calls", async () => {
+  await withHomestead("r", "spawn-x", spawnStateJson, async ({ stateFile }) => {
+    const calls: Array<Array<string>> = [];
+    await Effect.runPromise(markFinished("r", "spawn-x", "agent:review").pipe(Effect.provide(baseLayer(calls))));
+    expect(existsSync(stateFile)).toBe(false);
+    expect(ghCalls(calls)).toEqual([]);
+  });
+});
+
+test("completeBranch refuses spawn work without --allow-spawned (no side effects)", async () => {
+  await withHomestead("r", "spawn-x", spawnStateJson, async ({ primaryRoot, stateFile }) => {
+    const calls: Array<Array<string>> = [];
+    const layer = Layer.provideMerge(HerdrTest, baseLayer(calls));
+    await Effect.runPromise(
+      completeBranch(primaryRoot, "r", "spawn-x", false, undefined, false).pipe(Effect.provide(layer)),
+    );
+    // Aborted before any destructive step: no subprocess ran, state file intact.
+    expect(calls).toEqual([]);
+    expect(existsSync(stateFile)).toBe(true);
+  });
+});
+
+test("completeBranch proceeds on spawn work with --allow-spawned", async () => {
+  await withHomestead("r", "spawn-x", spawnStateJson, async ({ primaryRoot, stateFile }) => {
+    const calls: Array<Array<string>> = [];
+    const layer = Layer.provideMerge(HerdrTest, baseLayer(calls));
+    await Effect.runPromise(
+      completeBranch(primaryRoot, "r", "spawn-x", false, undefined, true).pipe(Effect.provide(layer)),
+    );
+    // Proceeded into teardown: git ran, markCompleted removed the state file,
+    // and (spawn work) still no gh issue calls.
+    expect(calls.length).toBeGreaterThan(0);
+    expect(ghCalls(calls)).toEqual([]);
+    expect(existsSync(stateFile)).toBe(false);
+  });
+});
 
 test("runBeforeTeardown passes verb + tracked", async () => {
   const seen: Array<{ verb: string; tracked: boolean }> = [];

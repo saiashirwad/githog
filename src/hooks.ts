@@ -28,8 +28,13 @@ export const runBeforeTeardown = (
   ctx: HomesteadContext,
   verb: TeardownVerb,
   tracked: boolean,
+  spawnedBy?: string,
 ): Effect.Effect<void, never, HomesteadServices> =>
-  hook === undefined ? Effect.void : normalizeHookResult(hook({ ...ctx, verb, tracked }));
+  hook === undefined
+    ? Effect.void
+    : normalizeHookResult(
+        hook(spawnedBy === undefined ? { ...ctx, verb, tracked } : { ...ctx, verb, tracked, spawnedBy }),
+      );
 
 export const runAfterTeardown = (
   hook: HomesteadConfig["afterTeardown"],

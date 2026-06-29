@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
-import { Effect, Option, Schema } from "effect";
+import { BunServices } from "@effect/platform-bun";
+import { Effect, FileSystem, Option, Path, Schema } from "effect";
 import {
+  AGENT_MARKER_FILE,
+  type AgentMarker,
+  readAgentMarker,
   resolveAssignees,
   resolveCloseComment,
   resolveCloseReason,
@@ -10,6 +14,7 @@ import {
   resolveReviewLabel,
   resolveStopComment,
   TrackingStateSchema,
+  writeAgentMarker,
 } from "./tracking.ts";
 
 const item = { number: 7, url: "u", title: "t" } as const;
@@ -22,6 +27,47 @@ test("TrackingState decodes legacy state without title/worktreeDir", () => {
   expect(legacy.worktreeDir).toBeUndefined();
 });
 
+test("legacy issue state file (no kind) decodes as kind: issue", () => {
+  // Backward compat: every state file written before the discriminator existed
+  // has no `kind` — it must still decode, defaulting to issue-work.
+  const decode = Schema.decodeUnknownSync(TrackingStateSchema);
+  const legacy = decode({ number: 7, url: "https://github.com/o/r/issues/7", title: "Fix bug" });
+  expect(legacy.kind).toBe("issue");
+  expect(legacy.number).toBe(7);
+  expect(legacy.spawn).toBeUndefined();
+});
+
+test("spawn state file decodes + round-trips with no number/url", async () => {
+  const spawn = {
+    kind: "spawn" as const,
+    worktreeDir: "/tmp/wt",
+    spawn: {
+      spawnedBy: "agent spawn",
+      paneId: "pane_123",
+      promptSlug: "fix-flaky-login-test",
+      spawnedAt: "2026-06-29T00:00:00.000Z",
+    },
+  };
+  const encoded = await Effect.runPromise(Schema.encodeUnknownEffect(TrackingStateSchema)(spawn));
+  const json = JSON.stringify(encoded);
+  const decoded = await Effect.runPromise(
+    Schema.decodeUnknownEffect(Schema.fromJsonString(TrackingStateSchema))(json),
+  );
+  expect(decoded).toEqual(spawn);
+  expect(decoded.number).toBeUndefined();
+  expect(decoded.url).toBeUndefined();
+});
+
+test("spawn state with missing number decodes without throwing", () => {
+  const decode = Schema.decodeUnknownSync(TrackingStateSchema);
+  const decoded = decode({
+    kind: "spawn",
+    spawn: { spawnedBy: "agent spawn", spawnedAt: "2026-06-29T00:00:00.000Z" },
+  });
+  expect(decoded.kind).toBe("spawn");
+  expect(decoded.number).toBeUndefined();
+});
+
 test("TrackingState round-trips title + worktreeDir", () => {
   const decode = Schema.decodeUnknownSync(TrackingStateSchema);
   const s = decode({ number: 7, url: "u", title: "Fix bug", worktreeDir: "/tmp/wt" });
@@ -31,6 +77,7 @@ test("TrackingState round-trips title + worktreeDir", () => {
 
 test("tracking state encode/decode round-trip", async () => {
   const state = {
+    kind: "issue" as const,
     number: 42,
     url: "https://github.com/o/r/issues/42",
     label: "agent:working",
@@ -87,7 +134,7 @@ test("resolveLabel passes string through and calls function", () => {
 });
 
 test("resolveReviewLabel uses tracking item for function reviewLabel", () => {
-  const state = Option.some({ number: 7, url: "u", title: "t" });
+  const state = Option.some({ kind: "issue" as const, number: 7, url: "u", title: "t" });
   expect(resolveReviewLabel("agent:review", { reviewLabel: (i) => `area:${i.number}` }, state)).toBe("area:7");
   expect(resolveReviewLabel("agent:review", { reviewLabel: "agent:wip" }, state)).toBe("agent:wip");
   expect(resolveReviewLabel("agent:review", undefined, Option.none())).toBe("agent:review");
@@ -106,4 +153,55 @@ test("labelColor default is 1D76DB", () => {
   expect(resolveLabelColor((c) => (c.kind === "review" ? "00FF00" : "0000FF"), { label: "x", kind: "review" })).toBe(
     "00FF00",
   );
+});
+
+const withTempDir = <A>(use: (dir: string) => Effect.Effect<A, unknown, FileSystem.FileSystem | Path.Path>) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const dir = yield* fs.makeTempDirectory({ prefix: "homestead-marker-" });
+    return yield* use(dir).pipe(Effect.ensuring(fs.remove(dir, { recursive: true }).pipe(Effect.ignore)));
+  }).pipe(Effect.provide(BunServices.layer));
+
+test("writeAgentMarker / readAgentMarker round-trip", async () => {
+  const marker: AgentMarker = {
+    kind: "spawn",
+    spawnedBy: "agent spawn",
+    paneId: "pane_abc",
+    promptSlug: "fix-flaky-login-test",
+    statusFile: "~/.homestead/status/repo/branch.json",
+    createdAt: "2026-06-29T00:00:00.000Z",
+  };
+  const readBack = await Effect.runPromise(
+    withTempDir((dir) =>
+      Effect.gen(function* () {
+        yield* writeAgentMarker(dir, marker);
+        return yield* readAgentMarker(dir);
+      }),
+    ),
+  );
+  expect(Option.isSome(readBack)).toBe(true);
+  expect(Option.getOrThrow(readBack)).toEqual(marker);
+});
+
+test("writeAgentMarker writes the .homestead-agent.json file", async () => {
+  const present = await Effect.runPromise(
+    withTempDir((dir) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        yield* writeAgentMarker(dir, {
+          kind: "spawn",
+          spawnedBy: "agent spawn",
+          createdAt: "2026-06-29T00:00:00.000Z",
+        });
+        return yield* fs.exists(path.join(dir, AGENT_MARKER_FILE));
+      }),
+    ),
+  );
+  expect(present).toBe(true);
+});
+
+test("readAgentMarker returns none when the marker is absent", async () => {
+  const result = await Effect.runPromise(withTempDir((dir) => readAgentMarker(dir)));
+  expect(Option.isNone(result)).toBe(true);
 });

@@ -15,6 +15,8 @@ Invoked as `/homestead-local-complete <branch-name>` (branch name doubles as the
 
 ## Steps
 
+0. **Check provenance — is this even your branch?** Before anything else, look for a `.homestead-agent.json` marker in the branch's worktree (or `kind: "spawn"` in its homestead tracking state). If it's there, this worktree was **machine-spawned** (`agent spawn`), not issue work you started — landing it merges someone/something else's auto-work into `main`. **STOP and surface it** ("this branch was spawned by `<spawnedBy>` — it's auto-work, not your issue; confirm before I land it"). Only proceed if the user explicitly confirms; `homestead complete` will itself refuse a spawn branch unless you pass `--allow-spawned`.
+
 1. **Inspect divergence + cleanliness.** Confirm the branch exists and see how it relates to `main`:
    ```
    git log --oneline main..<branch>          # commits to land
@@ -54,6 +56,7 @@ Common shapes: `bun run typecheck && bun test`, `pnpm turbo run typecheck`, `npm
 - Any test failed, or you skipped tests because "the merge looked clean"
 - Merge left conflict markers / the working tree isn't clean
 - You can't find the branch or its worktree
+- The worktree has a `.homestead-agent.json` marker (or `kind: "spawn"` tracking state) — it's machine-spawned auto-work, not your branch. Don't land it without explicit confirmation; `homestead complete` needs `--allow-spawned`.
 
 Any of these → report what failed and stop. Completing on a red build closes the issue and destroys the branch with broken code on `main`.
 

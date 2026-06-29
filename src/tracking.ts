@@ -6,17 +6,49 @@ import { resolveCallable } from "./callable.ts";
 import { makeContext, type HomesteadContext } from "./context.ts";
 import type { HomesteadServices, IssuesConfig, TrackingContext, WorkItem } from "./types.ts";
 
+// Who/what spawned a worktree. Present only on `kind: "spawn"` state — the
+// machine-spawned, issue-free flow (e.g. `agent spawn`). `spawnedBy` is free
+// text: "agent spawn", a parent paneId, a username.
+export const SpawnProvenanceSchema = Schema.Struct({
+  spawnedBy: Schema.String,
+  paneId: Schema.optional(Schema.String),
+  promptSlug: Schema.optional(Schema.String),
+  spawnedAt: Schema.String,
+});
+export type SpawnProvenance = typeof SpawnProvenanceSchema.Type;
+
+// `kind` defaults to "issue" so OLD state files (which carry no `kind`) keep
+// decoding as issue-work — a zero-touch migration. `number`/`url` are optional
+// because spawn-work has no GitHub issue; they are always present for issue-work.
 export const TrackingStateSchema = Schema.Struct({
-  number: Schema.Number,
-  url: Schema.String,
+  kind: Schema.Literals(["issue", "spawn"]).pipe(Schema.withDecodingDefaultKey(Effect.succeed("issue" as const))),
+  number: Schema.optional(Schema.Number),
+  url: Schema.optional(Schema.String),
   title: Schema.optional(Schema.String),
   worktreeDir: Schema.optional(Schema.String),
   label: Schema.optional(Schema.String),
   assignees: Schema.optional(Schema.Array(Schema.String)),
   assigned: Schema.optional(Schema.Boolean),
   commented: Schema.optional(Schema.Boolean),
+  spawn: Schema.optional(SpawnProvenanceSchema),
 });
 export type TrackingState = typeof TrackingStateSchema.Type;
+
+// The worktree-local `.homestead-agent.json` marker — a self-describing "this
+// worktree is auto-work" flag written inside the worktree dir alongside `.env`.
+// A landing tool with `cwd` inside the worktree can read it directly without
+// resolving repo-slug + branch-slug back to ~/.homestead/state/…
+export const AgentMarkerSchema = Schema.Struct({
+  kind: Schema.Literal("spawn"),
+  spawnedBy: Schema.String,
+  paneId: Schema.optional(Schema.String),
+  promptSlug: Schema.optional(Schema.String),
+  statusFile: Schema.optional(Schema.String),
+  createdAt: Schema.String,
+});
+export type AgentMarker = typeof AgentMarkerSchema.Type;
+
+export const AGENT_MARKER_FILE = ".homestead-agent.json";
 
 export const resolveCloseReason = (
   cfg: "completed" | "not planned" | ((ctx: HomesteadContext) => "completed" | "not planned") | undefined,
@@ -69,10 +101,46 @@ const gh = Effect.fn("homestead/gh")(function* (label: string, args: ReadonlyArr
   }
 });
 
+// Only meaningful for `kind: "issue"`, where `number`/`url` are always present.
+// The `?? 0` / `?? ""` defaults guard the optional types for the (never-hit)
+// spawn case rather than asserting non-null.
 export const itemFromState = (state: TrackingState): WorkItem => ({
-  number: state.number,
-  url: state.url,
+  number: state.number ?? 0,
+  url: state.url ?? "",
   title: state.title ?? "",
+});
+
+const agentMarkerPath = (path: Path.Path, worktreeDir: string) =>
+  path.join(worktreeDir, AGENT_MARKER_FILE);
+
+// Write the worktree-local spawn marker. Called by the spawn flow at provision
+// time alongside writing the global spawn tracking state.
+export const writeAgentMarker = Effect.fn("homestead/write-agent-marker")(function* (
+  worktreeDir: string,
+  marker: AgentMarker,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const encoded = yield* Schema.encodeUnknownEffect(AgentMarkerSchema)(marker).pipe(Effect.orDie);
+  yield* fs.writeFileString(agentMarkerPath(path, worktreeDir), `${JSON.stringify(encoded, null, 2)}\n`);
+});
+
+// Read the worktree-local spawn marker; `Option.none` when absent or unreadable.
+export const readAgentMarker = Effect.fn("homestead/read-agent-marker")(function* (worktreeDir: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const file = agentMarkerPath(path, worktreeDir);
+
+  const exists = yield* fs.exists(file).pipe(Effect.orElseSucceed(() => false));
+  if (!exists) return Option.none<AgentMarker>();
+
+  const content = yield* fs.readFileString(file).pipe(Effect.orElseSucceed(() => ""));
+  if (content === "") return Option.none<AgentMarker>();
+
+  const marker = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(AgentMarkerSchema))(content).pipe(
+    Effect.orElseSucceed(() => undefined),
+  );
+  return marker === undefined ? Option.none<AgentMarker>() : Option.some(marker);
 });
 
 export const stopCtxFromState = (
@@ -207,6 +275,7 @@ export const markStarted = Effect.fn("homestead/mark-started")(function* (
   }
 
   const state: TrackingState = {
+    kind: "issue",
     number: item.number,
     url: item.url,
     title: item.title,
@@ -241,6 +310,13 @@ export const markStopped = Effect.fn("homestead/mark-stopped")(function* (
   const state = yield* loadTrackingState(repoName, branch);
   if (Option.isNone(state)) return;
 
+  // Spawn-work has no GitHub issue: skip every `gh issue …` call but still
+  // remove the state file so the worktree stops being tracked.
+  if (state.value.kind === "spawn") {
+    yield* fs.remove(file).pipe(Effect.orElseSucceed(() => undefined));
+    return;
+  }
+
   const ref = String(state.value.number);
   if (state.value.label !== undefined) {
     yield* gh("gh issue edit --remove-label", ["issue", "edit", ref, "--remove-label", state.value.label]);
@@ -273,6 +349,13 @@ export const markFinished = Effect.fn("homestead/mark-finished")(function* (
 
   const state = yield* loadTrackingState(repoName, branch);
   if (Option.isNone(state)) return;
+
+  // Spawn-work has no GitHub issue: skip every `gh issue …` call but still
+  // remove the state file (review handoff is meaningless for auto-work).
+  if (state.value.kind === "spawn") {
+    yield* fs.remove(file).pipe(Effect.orElseSucceed(() => undefined));
+    return;
+  }
 
   const ref = String(state.value.number);
   if (state.value.label !== undefined) {
@@ -310,6 +393,13 @@ export const markCompleted = Effect.fn("homestead/mark-completed")(function* (
   const file = statePath(path, repoName, branch);
 
   const state = yield* loadTrackingState(repoName, branch);
+
+  // Spawn-work has no GitHub issue to close: remove the state file and stop.
+  if (Option.isSome(state) && state.value.kind === "spawn") {
+    yield* fs.remove(file).pipe(Effect.orElseSucceed(() => undefined));
+    return;
+  }
+
   const ref = Option.isSome(state)
     ? String(state.value.number)
     : /^\d+$/.test(branch)
