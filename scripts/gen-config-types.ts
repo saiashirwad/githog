@@ -32,7 +32,7 @@ const EFFECT_FREE_HOOKS: Record<string, string> = {
   afterSetup: "afterSetup?: ((ctx: WorktreeContext & { readonly plan: Plan }) => unknown) | undefined",
   afterLaunch: "afterLaunch?: ((ctx: HomesteadContext & { readonly paneId: string; }) => unknown) | undefined",
   beforeTeardown:
-    'beforeTeardown?: ((ctx: HomesteadContext & { readonly verb: "kill" | "close" | "complete"; readonly tracked: boolean; }) => unknown) | undefined',
+    'beforeTeardown?: ((ctx: HomesteadContext & { readonly verb: "kill" | "close" | "complete"; readonly tracked: boolean; readonly spawnedBy?: string; }) => unknown) | undefined',
   afterTeardown:
     'afterTeardown?: ((ctx: HomesteadContext & { readonly verb: "kill" | "close" | "complete"; readonly reviewLabel?: string; }) => unknown) | undefined',
   onEvent: "onEvent?: ((e: HomesteadEvent) => unknown) | undefined",

@@ -185,7 +185,7 @@ export interface HomesteadConfig {
   readonly pr?: PrConfig | undefined;
   readonly afterSetup?: ((ctx: WorktreeContext & { readonly plan: Plan }) => unknown) | undefined;
   readonly afterLaunch?: ((ctx: HomesteadContext & { readonly paneId: string; }) => unknown) | undefined;
-  readonly beforeTeardown?: ((ctx: HomesteadContext & { readonly verb: "kill" | "close" | "complete"; readonly tracked: boolean; }) => unknown) | undefined;
+  readonly beforeTeardown?: ((ctx: HomesteadContext & { readonly verb: "kill" | "close" | "complete"; readonly tracked: boolean; readonly spawnedBy?: string; }) => unknown) | undefined;
   readonly afterTeardown?: ((ctx: HomesteadContext & { readonly verb: "kill" | "close" | "complete"; readonly reviewLabel?: string; }) => unknown) | undefined;
   readonly onEvent?: ((e: HomesteadEvent) => unknown) | undefined;
 }

@@ -44,6 +44,8 @@ Consequences:
 - Do not assume `kill`/`complete` will delete a remote branch — on a PR-review worktree it deliberately won't.
 - `--keep-remote` is an *additional* opt-out (skips remote deletion even for your own tracked branches); the tracking-state floor sits underneath it regardless.
 
+**Spawned (auto-work) branches — the issue-side analogue.** A worktree carrying a `.homestead-agent.json` marker (or `kind: "spawn"` tracking state) was machine-spawned by `agent spawn`, not started by you. `homestead complete` **refuses** such a branch unless you pass `--allow-spawned`, printing who spawned it. Treat that refusal as a real signal: this is *not your branch* — confirm with the user before overriding. Just like you never `complete` someone else's PR, don't surprise-land auto-work.
+
 ## Landing a finished branch — defer, don't duplicate
 
 If the user wants to **land** a finished local branch (merge into `main`, verify, then complete), that is a separate, build-gated flow. **Use the `homestead-local-complete` skill** — it gates `complete` on a green typecheck + test run. Do not re-implement that merge/verify path here.

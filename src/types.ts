@@ -121,7 +121,14 @@ export interface HomesteadConfig {
   readonly afterSetup?: ((ctx: WorktreeContext & { readonly plan: Plan }) => unknown) | undefined;
   readonly afterLaunch?: ((ctx: HomesteadContext & { readonly paneId: string }) => unknown) | undefined;
   readonly beforeTeardown?:
-    | ((ctx: HomesteadContext & { readonly verb: "kill" | "close" | "complete"; readonly tracked: boolean }) => unknown)
+    | ((
+        ctx: HomesteadContext & {
+          readonly verb: "kill" | "close" | "complete";
+          readonly tracked: boolean;
+          // Present only for machine-spawned ("auto-work") branches: who/what spawned it.
+          readonly spawnedBy?: string;
+        },
+      ) => unknown)
     | undefined;
   readonly afterTeardown?:
     | ((ctx: HomesteadContext & { readonly verb: "kill" | "close" | "complete"; readonly reviewLabel?: string }) => unknown)

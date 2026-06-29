@@ -111,10 +111,11 @@ const runBranchTeardown = Effect.fn("homestead/run-branch-teardown")(function* (
   readonly repoName: string;
   readonly branch: string;
   readonly keepRemote: boolean;
+  readonly allowSpawned: boolean;
   readonly config: HomesteadConfig | undefined;
   readonly tracking: Effect.Effect<void, never, HomesteadServices>;
 }) {
-  const { verb, primaryRoot, repoName, branch, keepRemote, config, tracking } = input;
+  const { verb, primaryRoot, repoName, branch, keepRemote, allowSpawned, config, tracking } = input;
 
   yield* emit(config?.onEvent, teardownEvents(verb, branch, "start"));
 
@@ -123,8 +124,24 @@ const runBranchTeardown = Effect.fn("homestead/run-branch-teardown")(function* (
   // prevents kill/complete on a same-repo PR review from deleting the PR author's remote head.
   const tracked = yield* loadTrackingState(repoName, branch);
   const ctx = makeContext({ repoName, slug: branch, branch, worktreeDir: "" });
+  const spawnedBy =
+    Option.isSome(tracked) && tracked.value.kind === "spawn" ? tracked.value.spawn?.spawnedBy : undefined;
 
-  yield* runBeforeTeardown(config?.beforeTeardown, ctx, verb, Option.isSome(tracked));
+  yield* runBeforeTeardown(config?.beforeTeardown, ctx, verb, Option.isSome(tracked), spawnedBy);
+
+  // Provenance gate: never let `complete` surprise-land machine-spawned work.
+  // Refuse before any destructive step unless the caller passed --allow-spawned.
+  if (verb === "complete" && Option.isSome(tracked) && tracked.value.kind === "spawn" && !allowSpawned) {
+    const p = tracked.value.spawn;
+    const when = p?.spawnedAt !== undefined ? ` at ${p.spawnedAt}` : "";
+    yield* Console.log(
+      `  ⚠ '${branch}' was spawned by ${p?.spawnedBy ?? "an agent"}${when} — not your branch; pass --allow-spawned to land it`,
+    );
+    // Refused: do NOT emit a "done" event (the default reporter would render it
+    // as a false "✓ completed"). Nothing was torn down.
+    return;
+  }
+
   yield* teardownWorktree(primaryRoot, branch, tracking);
   yield* deleteLocalBranch(primaryRoot, branch);
   yield* deleteRemoteBranch(primaryRoot, branch, tracked, keepRemote);
@@ -145,6 +162,9 @@ export const killBranch = Effect.fn("homestead/kill-branch")(function* (
     repoName,
     branch,
     keepRemote,
+    // kill is reversible (keeps the branch) and has no flag, so the spawn gate
+    // (complete-only) never blocks it.
+    allowSpawned: true,
     config,
     tracking: markStopped(repoName, branch, config?.issues),
   });
@@ -182,6 +202,7 @@ export const completeBranch = Effect.fn("homestead/complete-branch")(function* (
   branch: string,
   keepRemote = false,
   config?: HomesteadConfig,
+  allowSpawned = false,
 ) {
   yield* runBranchTeardown({
     verb: "complete",
@@ -189,6 +210,7 @@ export const completeBranch = Effect.fn("homestead/complete-branch")(function* (
     repoName,
     branch,
     keepRemote,
+    allowSpawned,
     config,
     tracking: markCompleted(repoName, branch, config?.issues),
   });

@@ -200,14 +200,17 @@ const completeCommand = Command.make(
     keepRemote: Flag.boolean("keep-remote").pipe(
       Flag.withDescription("keep the remote branch (default: delete branches you own)"),
     ),
+    allowSpawned: Flag.boolean("allow-spawned").pipe(
+      Flag.withDescription("land machine-spawned (auto-work) branches (default: refuse)"),
+    ),
   },
-  ({ branches, keepRemote }) =>
+  ({ branches, keepRemote, allowSpawned }) =>
     Effect.gen(function* () {
       const repo = yield* resolveRepo();
       const config = yield* loadConfigOrUndefined(repo.primaryRoot);
       yield* Effect.forEach(
         branches,
-        (branch) => completeBranch(repo.primaryRoot, repo.repoName, branch, keepRemote, config),
+        (branch) => completeBranch(repo.primaryRoot, repo.repoName, branch, keepRemote, config, allowSpawned),
         {
           discard: true,
         },

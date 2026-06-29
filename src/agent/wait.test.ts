@@ -110,7 +110,7 @@ test("parseCompactDuration rejects garbage", () => {
 test("pickWorktreeDir prefers the tracking-state worktreeDir over the fallback", () => {
   expect(
     pickWorktreeDir(
-      Option.some({ number: 7, url: "u", worktreeDir: "/explicit/dir" }),
+      Option.some({ kind: "issue", number: 7, url: "u", worktreeDir: "/explicit/dir" }),
       "/fallback",
     ),
   ).toBe("/explicit/dir");
@@ -121,7 +121,7 @@ test("pickWorktreeDir uses the fallback when state is absent", () => {
 });
 
 test("pickWorktreeDir uses the fallback when state lacks a worktreeDir", () => {
-  expect(pickWorktreeDir(Option.some({ number: 7, url: "u" }), "/fallback")).toBe("/fallback");
+  expect(pickWorktreeDir(Option.some({ kind: "issue", number: 7, url: "u" }), "/fallback")).toBe("/fallback");
 });
 
 test("resolveWorktreeDir falls back to the ~/worktrees convention when no state on disk", async () => {

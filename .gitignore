@@ -22,6 +22,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .env.production.local
 .env.local
 
+# homestead worktree-local spawn marker (written inside each worktree, like .env)
+.homestead-agent.json
+
 # caches
 .eslintcache
 .cache
@@ -36,3 +39,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # vendored effect source (effect-ts skill) — cloned by `bun run prepare`
 .repos/effect
 /TASKS.md
+
+# local herdr/agent worktrees (never commit)
+.claude/worktrees/
