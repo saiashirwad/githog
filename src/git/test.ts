@@ -156,7 +156,7 @@ const buildGitTest = Effect.gen(function* () {
         Ref.update(journal, (j) => ({
           ...j,
           branchDeletes: [...j.branchDeletes, { cwd, name }],
-        })),
+        })).pipe(Effect.as(true)),
       deleteRemote: (cwd, remote, name) =>
         Ref.update(journal, (j) => ({
           ...j,

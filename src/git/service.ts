@@ -117,7 +117,7 @@ export class Git extends Context.Service<Git>()("Git", {
       branch: {
         create: (cwd: string, name: string, startPoint: string) =>
           mutate(cwd, ["branch", name, startPoint]),
-        delete: (cwd: string, name: string) => mutate(cwd, ["branch", "-D", name]),
+        delete: (cwd: string, name: string) => exit(cwd, ["branch", "-D", name]).pipe(Effect.map((code) => code === 0)),
         deleteRemote: (cwd: string, remote: string, name: string) =>
           attempt(cwd, ["push", remote, "--delete", name]),
         listLocal: (cwd: string) =>

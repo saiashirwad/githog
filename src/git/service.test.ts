@@ -74,6 +74,23 @@ test("symbolicRef returns undefined when the ref is absent", async () => {
   }
 });
 
+test("branch.delete returns true on success and false when branch is gone", async () => {
+  const root = makeRepo();
+  try {
+    sh(root, "commit", "--allow-empty", "-m", "init");
+    sh(root, "checkout", "-b", "to-delete");
+    sh(root, "checkout", "main");
+    // First delete: branch exists → expect true
+    const first = await run(Effect.flatMap(Git, (git) => git.branch.delete(root, "to-delete")));
+    expect(first).toBe(true);
+    // Second delete: branch already gone → expect false (tolerant, no crash)
+    const second = await run(Effect.flatMap(Git, (git) => git.branch.delete(root, "to-delete")));
+    expect(second).toBe(false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("worktree.list reports the primary checkout", async () => {
   const root = makeRepo();
   try {
