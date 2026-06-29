@@ -6,6 +6,8 @@ alwaysApply: false
 
 Use Bun, not Node: `bun test`, `bun install`, `bun run`, `bunx`. Bun loads `.env` automatically.
 
+Orchestration contract (status sentinel, `agent wait` exit codes, provenance markers): see [docs/ORCHESTRATION.md](./docs/ORCHESTRATION.md).
+
 <!-- effect-solutions:start -->
 ## Effect Best Practices
 

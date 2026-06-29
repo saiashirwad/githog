@@ -125,6 +125,13 @@ agent: {
 
 It goes further than this — shared services, lifecycle hooks, more agent options. The [example config](./homestead.config.example.ts) covers the rest.
 
+## Driving homestead from an agent
+
+Any coding agent — Claude or otherwise — can drive worktree orchestration through a
+small, stable contract: the status sentinel, the `agent wait` exit codes, and the
+provenance markers that keep auto-work from being silently landed. See
+[docs/ORCHESTRATION.md](./docs/ORCHESTRATION.md).
+
 ## Requirements
 
 git, a herdr session, [Bun](https://bun.sh), and an authenticated `gh` for issue and PR flows.
