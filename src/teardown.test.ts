@@ -12,7 +12,9 @@ import { runAfterTeardown, runBeforeTeardown } from "./hooks.ts";
 import { makeContext } from "./context.ts";
 import { HerdrError } from "./herdr/errors.ts";
 import { HerdrTest, HerdrTestHandle } from "./herdr/test.ts";
-import { removeHerdrWorktree, completeBranch } from "./teardown.ts";
+import { GitLive } from "./git/service.ts";
+import { deleteLocalBranch, removeHerdrWorktree, completeBranch } from "./teardown.ts";
+import { GitTest, GitTestHandle } from "./git/test.ts";
 import { markCompleted, markFinished, markStopped } from "./tracking.ts";
 import { slugify } from "./text.ts";
 
@@ -99,7 +101,7 @@ test("markFinished on spawn state deletes the file and issues no gh calls", asyn
 test("completeBranch refuses spawn work without --allow-spawned (no side effects)", async () => {
   await withHomestead("r", "spawn-x", spawnStateJson, async ({ primaryRoot, stateFile }) => {
     const calls: Array<Array<string>> = [];
-    const layer = Layer.provideMerge(HerdrTest, baseLayer(calls));
+    const layer = Layer.provideMerge(Layer.mergeAll(GitLive, HerdrTest), baseLayer(calls));
     await Effect.runPromise(
       completeBranch(primaryRoot, "r", "spawn-x", false, undefined, false).pipe(Effect.provide(layer)),
     );
@@ -112,7 +114,7 @@ test("completeBranch refuses spawn work without --allow-spawned (no side effects
 test("completeBranch proceeds on spawn work with --allow-spawned", async () => {
   await withHomestead("r", "spawn-x", spawnStateJson, async ({ primaryRoot, stateFile }) => {
     const calls: Array<Array<string>> = [];
-    const layer = Layer.provideMerge(HerdrTest, baseLayer(calls));
+    const layer = Layer.provideMerge(Layer.mergeAll(GitLive, HerdrTest), baseLayer(calls));
     await Effect.runPromise(
       completeBranch(primaryRoot, "r", "spawn-x", false, undefined, true).pipe(Effect.provide(layer)),
     );
@@ -177,7 +179,7 @@ test("teardownWorktree kills the branch's dev servers BEFORE git worktree remova
     } as unknown as ChildProcessSpawner.ChildProcessSpawner["Service"]);
 
     const layer = Layer.provideMerge(
-      HerdrTest,
+      Layer.mergeAll(GitLive, HerdrTest),
       Layer.mergeAll(BunFileSystem.layer, BunPath.layer, orderingSpawner),
     );
     await Effect.runPromise(
@@ -280,4 +282,25 @@ test("emit delivers teardown events to custom onEvent", async () => {
     { type: "teardown", verb: "kill", branch: "b", phase: "start" },
     { type: "teardown", verb: "kill", branch: "b", phase: "done" },
   ]);
+});
+
+test("deleteLocalBranch: branch.delete failure logs ⚠ warning and resolves (warn-and-continue)", async () => {
+  const root = "/repo/primary";
+  const branch = "feat/x";
+
+  const program = Effect.gen(function* () {
+    const handle = yield* GitTestHandle;
+    yield* handle.setRefExists(root, `refs/heads/${branch}`, true);
+    yield* handle.setBranchDeleteResult(root, branch, false);
+    yield* deleteLocalBranch(root, branch);
+    return yield* TestConsole.logLines;
+  });
+
+  const lines = await Effect.runPromise(
+    program.pipe(
+      Effect.provide(Layer.mergeAll(GitTest, BunServices.layer, TestConsole.layer)),
+    ),
+  );
+  const text = lines.map((l) => (Array.isArray(l) ? l.join(" ") : String(l))).join("\n");
+  expect(text).toContain(`⚠ git branch -D ${branch} failed`);
 });

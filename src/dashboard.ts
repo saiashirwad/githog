@@ -1,7 +1,6 @@
 import { Effect, FileSystem, Option, Path, Schema } from "effect";
-import type { ChildProcessSpawner } from "effect/unstable/process";
-import { parseWorktreePorcelain } from "./git/porcelain.ts";
-import { capture } from "./process.ts";
+import type { WorktreePorcelainEntry } from "./git/porcelain.ts";
+import { Git } from "./git/service.ts";
 import { readEnvVar, slugify } from "./text.ts";
 import { listTrackedBranches, readAgentMarker } from "./tracking.ts";
 import { Herdr } from "./herdr/service.ts";
@@ -84,18 +83,15 @@ const readEnvCells = (
 // are the spine (the primary checkout is excluded); .env, tracking state, herdr,
 // the agent sentinel, and the provenance marker each left-join and degrade
 // independently. Orphaned tracking-state files are appended as `(stale state)`
-// rows. STRICTLY READ-ONLY: only `capture`, FileSystem reads, the tracking
+// rows. STRICTLY READ-ONLY: only `git.worktree.list`, FileSystem reads, the tracking
 // loaders, and herdr's read surface (`worktree.list`) are touched.
 export const collectDashboard = Effect.fn("homestead/collect-dashboard")(function* (
   repo: Repo,
   config: HomesteadConfig | undefined,
-  // The git-worktree spine, injectable so tests can supply fixture porcelain
+  // The git-worktree spine, injectable so tests can supply fixture entries
   // without a real repo. Defaults to the live read (`git worktree list`).
-  gitWorktreeList: Effect.Effect<string, never, ChildProcessSpawner.ChildProcessSpawner> = capture(
-    "git",
-    ["worktree", "list", "--porcelain"],
-    repo.startCwd,
-  ),
+  gitWorktreeList: Effect.Effect<ReadonlyArray<WorktreePorcelainEntry>, never, Git> =
+    Git.pipe(Effect.flatMap((git) => git.worktree.list(repo.startCwd))),
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -114,8 +110,8 @@ export const collectDashboard = Effect.fn("homestead/collect-dashboard")(functio
       : openWorkspaceIdForBranch(herdrWorktrees.value, branch);
 
   // Spine: git worktrees, minus the primary checkout (not an isolated env).
-  const worktreeList = yield* gitWorktreeList;
-  const entries = parseWorktreePorcelain(worktreeList).filter(
+  const worktrees = yield* gitWorktreeList;
+  const entries = worktrees.filter(
     (entry) => path.resolve(entry.path) !== path.resolve(repo.primaryRoot),
   );
 
@@ -210,8 +206,8 @@ const cellsFor = (row: DashboardRow): ReadonlyArray<string> => [
 export const renderDashboard = (
   repo: Repo,
   config: HomesteadConfig | undefined,
-  gitWorktreeList?: Effect.Effect<string, never, ChildProcessSpawner.ChildProcessSpawner>,
-): Effect.Effect<string, never, FileSystem.FileSystem | Path.Path | Herdr | ChildProcessSpawner.ChildProcessSpawner> =>
+  gitWorktreeList?: Effect.Effect<ReadonlyArray<WorktreePorcelainEntry>, never, Git>,
+): Effect.Effect<string, never, FileSystem.FileSystem | Path.Path | Herdr | Git> =>
   collectDashboard(repo, config, gitWorktreeList).pipe(
     Effect.map((rows) => (rows.length === 0 ? "No linked worktrees." : renderTable(rows))),
   );

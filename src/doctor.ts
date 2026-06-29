@@ -1,9 +1,9 @@
 import { Console, Effect, FileSystem, Option, Path } from "effect";
-import type { ChildProcessSpawner } from "effect/unstable/process";
 import { resolve as resolvePath } from "node:path";
-import { parseWorktreePorcelain, type WorktreePorcelainEntry } from "./git/porcelain.ts";
+import type { WorktreePorcelainEntry } from "./git/porcelain.ts";
 import { parseGitStatus } from "./gc.ts";
-import { capture, probeTcp } from "./process.ts";
+import { Git } from "./git/service.ts";
+import { probeTcp } from "./process.ts";
 import { readEnvVar, slugify } from "./text.ts";
 import { listTrackedBranches, loadTrackingState, type TrackedBranch } from "./tracking.ts";
 import { readProvisionMarker } from "./worktree/marker.ts";
@@ -143,15 +143,6 @@ const countSeverity = (report: DoctorReport, severity: Severity): number =>
 
 const key = (p: string) => resolvePath(p);
 
-// capture() demotes spawn/IO failure to a defect; the scan must survive a git
-// hiccup, so recover defects to "" (mirrors gc.ts's safeCapture).
-const safeCapture = (
-  command: string,
-  args: ReadonlyArray<string>,
-  cwd?: string,
-): Effect.Effect<string, never, ChildProcessSpawner.ChildProcessSpawner> =>
-  capture(command, args, cwd).pipe(Effect.catchDefect(() => Effect.succeed("")));
-
 // Owned keys = configured port keys plus any keys env.derive emits. derive is a
 // user function; call it best-effort (read-only) and ignore a throw.
 const ownedKeysFor = (
@@ -199,16 +190,17 @@ export interface DoctorScan {
 export const scanDoctor = Effect.fn("homestead/scan-doctor")(function* (
   repo: Repo,
   config: HomesteadConfig,
-  gitWorktreeList: Effect.Effect<string, never, ChildProcessSpawner.ChildProcessSpawner> = safeCapture(
-    "git",
-    ["worktree", "list", "--porcelain"],
-    repo.startCwd,
+  gitWorktreeList: Effect.Effect<ReadonlyArray<WorktreePorcelainEntry>, never, Git> = Git.pipe(
+    Effect.flatMap((git) => git.worktree.list(repo.startCwd)),
   ),
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const git = yield* Git;
 
-  const gitWorktrees = parseWorktreePorcelain(yield* gitWorktreeList);
+  const gitWorktrees = yield* gitWorktreeList.pipe(
+    Effect.catchDefect(() => Effect.succeed([] as ReadonlyArray<WorktreePorcelainEntry>)),
+  );
   const primary = key(repo.primaryRoot);
   const worktrees = gitWorktrees.filter((e) => key(e.path) !== primary);
 
@@ -265,11 +257,7 @@ export const scanDoctor = Effect.fn("homestead/scan-doctor")(function* (
     // expensive bit and irrelevant for provisioned worktrees.
     let hasLocalWork = false;
     if (!hasMarker && Option.isNone(tracked)) {
-      const status = yield* safeCapture(
-        "git",
-        ["status", "--porcelain=v2", "--branch"],
-        entry.path,
-      );
+      const status = yield* git.statusV2(entry.path).pipe(Effect.catchDefect(() => Effect.succeed("")));
       // Empty output means the probe failed — fail safe (assume work present) so
       // doctor never wrongly implies an untracked worktree is disposable.
       const parsed = status === "" ? { dirty: true, unpushed: true } : parseGitStatus(status);

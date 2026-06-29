@@ -1,11 +1,9 @@
 import { Console, Effect, Option } from "effect";
 import { emit, teardownEvents } from "./events.ts";
-import { worktreePathForBranch } from "./git/porcelain.ts";
+import { Git } from "./git/service.ts";
 import { Herdr } from "./herdr/service.ts";
 import { runAfterTeardown, runBeforeTeardown, type TeardownVerb } from "./hooks.ts";
-import { capture, runExit } from "./process.ts";
 import { killServers } from "./servers.ts";
-import { refExists } from "./worktree/base-ref.ts";
 import { makeContext } from "./context.ts";
 import {
   loadTrackingState,
@@ -65,19 +63,12 @@ const teardownWorktree = Effect.fn("homestead/teardown-worktree")(function* (
 
   yield* removeHerdrWorktree(primaryRoot, branch);
 
-  const porcelain = yield* capture("git", ["worktree", "list", "--porcelain"], primaryRoot);
-  const path = worktreePathForBranch(porcelain, branch);
+  const git = yield* Git;
+  const path = yield* git.worktree.pathForBranch(primaryRoot, branch);
   if (path !== undefined) {
-    yield* Console.log(`  git worktree remove --force ${path}`);
-    const removeCode = yield* runExit("git", ["worktree", "remove", "--force", path], { cwd: primaryRoot });
-    if (removeCode !== 0) {
-      yield* Console.log(`  ⚠ git worktree remove failed (exit ${removeCode})`);
-    }
+    yield* git.worktree.remove(primaryRoot, path);
   }
-  const pruneCode = yield* runExit("git", ["worktree", "prune"], { cwd: primaryRoot });
-  if (pruneCode !== 0) {
-    yield* Console.log(`  ⚠ git worktree prune failed (exit ${pruneCode})`);
-  }
+  yield* git.worktree.prune(primaryRoot);
 });
 
 // Delete the remote branch, with two guards:
@@ -89,10 +80,7 @@ const teardownWorktree = Effect.fn("homestead/teardown-worktree")(function* (
 // floor (only ever call this for a branch homestead owns). `gc` reuses this for
 // orphaned branches it has already proven it owns via tracking state.
 export const pushDeleteRemoteBranch = (primaryRoot: string, branch: string) =>
-  runExit("git", ["push", "origin", "--delete", branch], { cwd: primaryRoot }).pipe(
-    Effect.catchDefect(() => Effect.void),
-    Effect.asVoid,
-  );
+  Git.pipe(Effect.flatMap((git) => git.branch.deleteRemote(primaryRoot, "origin", branch)));
 
 const deleteRemoteBranch = Effect.fn("homestead/delete-remote-branch")(function* (
   primaryRoot: string,
@@ -109,10 +97,11 @@ const deleteRemoteBranch = Effect.fn("homestead/delete-remote-branch")(function*
 });
 
 export const deleteLocalBranch = Effect.fn("homestead/delete-local-branch")(function* (primaryRoot: string, branch: string) {
-  if (yield* refExists(primaryRoot, `refs/heads/${branch}`)) {
-    const code = yield* runExit("git", ["branch", "-D", branch], { cwd: primaryRoot });
-    if (code !== 0) {
-      yield* Console.log(`  ⚠ git branch -D ${branch} failed (exit ${code}) — is it checked out elsewhere?`);
+  const git = yield* Git;
+  if (yield* git.refExists(primaryRoot, `refs/heads/${branch}`)) {
+    const ok = yield* git.branch.delete(primaryRoot, branch);
+    if (!ok) {
+      yield* Console.log(`  ⚠ git branch -D ${branch} failed — is it checked out elsewhere?`);
     }
   } else {
     yield* Console.log(`  (branch '${branch}' already gone)`);

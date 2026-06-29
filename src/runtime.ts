@@ -1,5 +1,6 @@
 import { BunServices } from "@effect/platform-bun";
 import { Layer } from "effect";
+import { GitLive } from "./git/service.ts";
 import { Herdr } from "./herdr/service.ts";
 import { PortAllocator } from "./worktree/ports.ts";
 
@@ -11,7 +12,7 @@ import { PortAllocator } from "./worktree/ports.ts";
 // every tool call (see src/mcp.ts). Building it per call would mint a fresh
 // semaphore each time and lose that in-process collision avoidance.
 export const AppLayer = Layer.provideMerge(
-  Layer.mergeAll(Layer.effect(Herdr, Herdr.make), PortAllocator.layer),
+  Layer.mergeAll(Layer.effect(Herdr, Herdr.make), GitLive, PortAllocator.layer),
   BunServices.layer,
 );
 

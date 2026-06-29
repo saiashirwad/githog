@@ -6,6 +6,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import * as os from "node:os";
 import * as path from "node:path";
 import { HerdrTest, HerdrTestHandle } from "../herdr/test.ts";
+import { GitLive } from "../git/service.ts";
 import { slugify } from "../text.ts";
 import { AGENT_MARKER_FILE } from "../tracking.ts";
 import type { HomesteadConfig } from "../types.ts";
@@ -15,7 +16,7 @@ import { STATUS_FILE_INSTRUCTION } from "./defaults.ts";
 import { AGENT_STATUS_RELPATH } from "./status.ts";
 import { buildSpawnMarker, resolveSpawnPrompt, seedSpawnPrompt, spawnAgent } from "./spawn.ts";
 
-const TestLayer = Layer.provideMerge(Layer.mergeAll(HerdrTest, PortAllocator.layer), BunServices.layer);
+const TestLayer = Layer.provideMerge(Layer.mergeAll(GitLive, HerdrTest, PortAllocator.layer), BunServices.layer);
 const noStdin = Effect.succeed("");
 
 // --- prompt resolution -------------------------------------------------------
