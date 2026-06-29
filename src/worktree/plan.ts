@@ -1,9 +1,9 @@
 import { Console, Effect, FileSystem, Path } from "effect";
 import * as os from "node:os";
 import { emit } from "../events.ts";
-import { parseWorktreePorcelain } from "../git/porcelain.ts";
+import { Git } from "../git/service.ts";
 import { nextFreePort, readEnvVar, slugify } from "../text.ts";
-import { capture, probeTcp, run } from "../process.ts";
+import { probeTcp } from "../process.ts";
 import {
   DEFAULT_ENV_FALLBACK,
   DEFAULT_ENV_SOURCE,
@@ -17,7 +17,7 @@ import {
   type WorktreeContext,
   type WorktreeOptions,
 } from "../types.ts";
-import { refExists, resolveDefaultBaseRef } from "./base-ref.ts";
+import { resolveDefaultBaseRef } from "./base-ref.ts";
 import {
   liveReservations,
   readReservations,
@@ -180,6 +180,7 @@ export const resolveTarget = Effect.fn("homestead/resolve-target")(function* (
   options: WorktreeOptions,
   config: HomesteadConfig,
 ) {
+  const git = yield* Git;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
 
@@ -200,7 +201,7 @@ export const resolveTarget = Effect.fn("homestead/resolve-target")(function* (
       path,
     });
 
-    const exists = yield* refExists(repo.primaryRoot, `refs/heads/${branch}`);
+    const exists = yield* git.refExists(repo.primaryRoot, `refs/heads/${branch}`);
     const from = options.from ?? (exists ? undefined : yield* resolveDefaultBaseRef(repo.primaryRoot));
     yield* emit(config.onEvent, {
       type: "worktree.creating",
@@ -215,21 +216,17 @@ export const resolveTarget = Effect.fn("homestead/resolve-target")(function* (
       } else {
         yield* fs.makeDirectory(path.dirname(targetDir), { recursive: true });
         if (exists) {
-          yield* run("git worktree add", "git", ["worktree", "add", targetDir, branch], {
-            cwd: repo.primaryRoot,
-          });
+          yield* git.worktree.add(repo.startCwd, { dir: targetDir, branch });
         } else {
           const baseRef = from ?? (yield* resolveDefaultBaseRef(repo.primaryRoot));
-          yield* run("git worktree add", "git", ["worktree", "add", "-b", branch, targetDir, baseRef], {
-            cwd: repo.primaryRoot,
-          });
+          yield* git.worktree.addNew(repo.startCwd, { dir: targetDir, branch, baseRef });
         }
       }
     }
   } else {
-    targetDir = yield* capture("git", ["rev-parse", "--show-toplevel"], repo.startCwd);
-    const head = yield* capture("git", ["rev-parse", "--abbrev-ref", "HEAD"], targetDir);
-    branch = head === "HEAD" ? yield* capture("git", ["rev-parse", "--short", "HEAD"], targetDir) : head;
+    targetDir = yield* git.topLevel(repo.startCwd);
+    const head = yield* git.currentBranch(targetDir);
+    branch = head === "HEAD" ? yield* git.shortHead(targetDir) : head;
   }
 
   const slug = slugify(branch) || slugify(path.basename(targetDir));
@@ -244,6 +241,7 @@ export const resolvePlan = Effect.fn("homestead/resolve-plan")(function* (
   config: HomesteadConfig,
   probe: (port: number) => Effect.Effect<boolean> = (port) => probeTcp(PROBE_HOST, port, PROBE_TIMEOUT_MS),
 ) {
+  const git = yield* Git;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
 
@@ -265,8 +263,7 @@ export const resolvePlan = Effect.fn("homestead/resolve-plan")(function* (
   const sourceContent = sourceExists ? yield* fs.readFileString(sourcePath) : "";
 
   // Gather ports already claimed by sibling worktrees so we never reuse one.
-  const worktreeList = yield* capture("git", ["worktree", "list", "--porcelain"], repo.startCwd);
-  const worktreePaths = parseWorktreePorcelain(worktreeList).map((entry) => entry.path);
+  const worktreePaths = (yield* git.worktree.list(repo.startCwd)).map((entry) => entry.path);
 
   const ports = config.ports ?? [];
   const siblingEnvContents: Array<string> = [];
