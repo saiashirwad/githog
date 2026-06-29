@@ -128,7 +128,7 @@ test("landBranch: real conflict → {conflict} and the merge is aborted", async 
   expect(outcome).toEqual({ _tag: "conflict", files: ["src/app.ts"] });
 });
 
-test("landBranch: generated-only conflict is regenerated, not aborted", async () => {
+test("landBranch: generated-only conflict lands via add+commit, not aborted", async () => {
   const outcome = await runFake(
     Effect.gen(function* () {
       const handle = yield* GitTestHandle;
@@ -138,7 +138,11 @@ test("landBranch: generated-only conflict is regenerated, not aborted", async ()
         _tag: "Conflict",
         files: ["src/generated/types.d.ts"],
       });
-      return yield* landBranch(FAKE_ROOT, "feature", fakeSettings({ regen: [] }));
+      const result = yield* landBranch(FAKE_ROOT, "feature", fakeSettings({ regen: [] }));
+      const journal = yield* handle.journal();
+      expect(journal.adds).toEqual([FAKE_ROOT]);
+      expect(journal.commits).toEqual([FAKE_ROOT]);
+      return result;
     }),
   );
   expect(outcome).toEqual({ _tag: "landed", branch: "feature" });
