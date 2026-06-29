@@ -1,6 +1,13 @@
 import { expect, test } from "bun:test";
 import { Effect, Schema } from "effect";
-import { matcher, openWorkspaceIdForBranch, WorktreeListSchema } from "./types.ts";
+import {
+  matcher,
+  openWorkspaceIdForBranch,
+  WorkspaceCreatedSchema,
+  WorkspaceListSchema,
+  workspaceIdForLabel,
+  WorktreeListSchema,
+} from "./types.ts";
 
 test("matcher substring vs regex", () => {
   const sub = matcher("hello", false);
@@ -44,4 +51,50 @@ test("WorktreeListSchema decodes herdr worktree list JSON", async () => {
   );
   expect(openWorkspaceIdForBranch(decoded.result.worktrees, "42")).toBe("ws-42");
   expect(openWorkspaceIdForBranch(decoded.result.worktrees, "main")).toBeUndefined();
+});
+
+test("workspaceIdForLabel returns workspace id when label matches", () => {
+  const workspaces = [
+    { workspace_id: "w1", label: "issue-30" },
+    { workspace_id: "w2", label: "[dispatched]" },
+  ];
+  expect(workspaceIdForLabel(workspaces, "[dispatched]")).toBe("w2");
+  expect(workspaceIdForLabel(workspaces, "missing")).toBeUndefined();
+});
+
+test("workspaceIdForLabel ignores a null label", () => {
+  const workspaces = [{ workspace_id: "w1", label: null }];
+  expect(workspaceIdForLabel(workspaces, "[dispatched]")).toBeUndefined();
+});
+
+test("WorkspaceListSchema decodes herdr workspace list JSON (label + workspace_id only)", async () => {
+  const json = JSON.stringify({
+    id: "cli:workspace:list",
+    result: {
+      type: "workspace_list",
+      workspaces: [
+        { label: "issue-30", number: 1, workspace_id: "w1", agent_status: "idle" },
+        { label: "[dispatched]", number: 2, workspace_id: "w2" },
+      ],
+    },
+  });
+  const decoded = await Effect.runPromise(
+    Schema.decodeUnknownEffect(Schema.fromJsonString(WorkspaceListSchema))(json),
+  );
+  expect(workspaceIdForLabel(decoded.result.workspaces, "[dispatched]")).toBe("w2");
+});
+
+test("WorkspaceCreatedSchema extracts the new workspace id", async () => {
+  const json = JSON.stringify({
+    id: "cli:workspace:create",
+    result: {
+      type: "workspace_created",
+      root_pane: { pane_id: "w3:p1", workspace_id: "w3" },
+      workspace: { label: "[dispatched]", number: 3, workspace_id: "w3" },
+    },
+  });
+  const decoded = await Effect.runPromise(
+    Schema.decodeUnknownEffect(Schema.fromJsonString(WorkspaceCreatedSchema))(json),
+  );
+  expect(decoded.result.workspace.workspace_id).toBe("w3");
 });

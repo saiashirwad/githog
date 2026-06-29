@@ -14,6 +14,10 @@ import { resolveCommand } from "../agent/defaults.ts";
 import { Herdr } from "./service.ts";
 import { launchAndSeed, toSpec } from "./launch.ts";
 
+// The single workspace that collects every orchestrator-spawned (auto) agent so
+// the user can never confuse auto-work with their own worktrees.
+export const DISPATCHED_WORKSPACE_LABEL = "[dispatched]";
+
 export const resolveSurfaceLabel = (
   cfg: ((ctx: SurfaceCtx) => string) | undefined,
   ctx: SurfaceCtx,
@@ -48,13 +52,16 @@ interface LaunchCoreInput {
   readonly item?: WorkItem;
   readonly slug?: string;
   readonly args?: ReadonlyArray<string>;
+  // When set, this launch is orchestrator-spawned ("auto"): it nests under the
+  // shared `[dispatched]` workspace and its label is prefixed with `[auto] `.
+  readonly auto?: boolean;
 }
 
 // The shared surface-open + seed core. Knows nothing about WorkItem beyond the
 // optional event payload — both `launchAgent` (issue) and `launchFreeAgent`
 // (spawn) funnel through here with an already-resolved prompt.
 const launchCore = Effect.fn("homestead/launch-core")(function* (input: LaunchCoreInput) {
-  const { config, plan, branch, repoName, agent, prompt, surfaceCtx, item, slug, args = [] } = input;
+  const { config, plan, branch, repoName, agent, prompt, surfaceCtx, item, slug, args = [], auto = false } = input;
   const baseCtx = makeContext({
     repoName,
     slug: plan.slug,
@@ -74,7 +81,17 @@ const launchCore = Effect.fn("homestead/launch-core")(function* (input: LaunchCo
     command: [spec.command],
     worktreeDir: plan.targetDir,
   });
-  const paneId = yield* herdr.createSurface(surface, plan.targetDir, resolveSurfaceLabel(agent.surfaceLabel, surfaceCtx));
+  // Route by provenance: auto launches nest under the shared `[dispatched]`
+  // workspace and wear an `[auto] ` marker; everything else is untouched. A user
+  // `surfaceLabel` override still wins, but auto prepends `[auto] ` to its result
+  // (with no override, the bare slug is used — not the `agent-` default).
+  const baseLabel =
+    auto && agent.surfaceLabel === undefined ? plan.slug : resolveSurfaceLabel(agent.surfaceLabel, surfaceCtx);
+  const label = auto ? `[auto] ${baseLabel}` : baseLabel;
+  const runtime = auto
+    ? { workspaceId: yield* herdr.findOrCreateWorkspace(DISPATCHED_WORKSPACE_LABEL), cwd: process.cwd() }
+    : undefined;
+  const paneId = yield* herdr.createSurface(surface, plan.targetDir, label, runtime);
 
   yield* launchAndSeed(paneId, spec, prompt, { readyTimeoutMs: agent.readyTimeoutMs });
   yield* runAfterLaunch(config.afterLaunch, baseCtx, paneId);
@@ -127,6 +144,9 @@ export interface LaunchFreeAgentInput {
   readonly agent: ResolvedAgent;
   readonly prompt: string;
   readonly args?: ReadonlyArray<string>;
+  // Provenance marker. Its presence is the single source of truth for "this is
+  // auto" — it routes the surface into `[dispatched]` with an `[auto] ` label.
+  readonly spawnedBy?: string | undefined;
 }
 
 // Issue-free sibling of `launchAgent`: boots an agent in an already-provisioned
@@ -134,7 +154,7 @@ export interface LaunchFreeAgentInput {
 export const launchFreeAgent = Effect.fn("homestead/launch-free-agent")(function* (
   input: LaunchFreeAgentInput,
 ) {
-  const { config, plan, slug, branch, repoName, agent, prompt, args = [] } = input;
+  const { config, plan, slug, branch, repoName, agent, prompt, args = [], spawnedBy } = input;
   const baseCtx = makeContext({ repoName, slug: plan.slug, branch, worktreeDir: plan.targetDir });
   return yield* launchCore({
     config,
@@ -146,5 +166,6 @@ export const launchFreeAgent = Effect.fn("homestead/launch-free-agent")(function
     surfaceCtx: { ...baseCtx, kind: "agent" },
     slug,
     args,
+    auto: spawnedBy !== undefined,
   });
 });

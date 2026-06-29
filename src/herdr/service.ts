@@ -8,6 +8,9 @@ import {
   type HerdrRuntimeEnv,
   type ReadSource,
   type SurfaceKind,
+  WorkspaceCreatedSchema,
+  workspaceIdForLabel,
+  WorkspaceListSchema,
   WorktreeListSchema,
 } from "./types.ts";
 
@@ -58,7 +61,23 @@ export class Herdr extends Context.Service<Herdr>()("Herdr", {
       return res.result.worktrees;
     });
 
+    // Find an open herdr workspace by label, else create a fresh one and return
+    // its workspace id. Both `workspace list` and `workspace create` emit JSON on
+    // plain invocation — they reject a `--json` flag — so none is passed.
+    const findOrCreateWorkspace = Effect.fn("herdr/find-or-create-workspace")(function* (label: string) {
+      yield* requireHerdrPane();
+      const listJson = yield* exec("workspace.list", ["workspace", "list"]);
+      const list = yield* decodeHerdr("workspace.list", WorkspaceListSchema, listJson);
+      const existing = workspaceIdForLabel(list.result.workspaces, label);
+      if (existing !== undefined) return existing;
+      const createJson = yield* exec("workspace.create", ["workspace", "create", "--label", label, "--no-focus"]);
+      const created = yield* decodeHerdr("workspace.create", WorkspaceCreatedSchema, createJson);
+      return created.result.workspace.workspace_id;
+    });
+
     return {
+      findOrCreateWorkspace,
+
       createSurface: Effect.fn("herdr/create-surface")(function* (
         kind: SurfaceKind,
         dir: string,

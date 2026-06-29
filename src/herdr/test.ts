@@ -2,18 +2,28 @@ import { Context, Effect, Layer, Ref } from "effect";
 import { HerdrError } from "./errors.ts";
 import { makePolling } from "./poll.ts";
 import { Herdr } from "./service.ts";
-import type { SurfaceKind, WorktreeEntry } from "./types.ts";
+import type { HerdrRuntimeEnv, SurfaceKind, WorkspaceEntry, WorktreeEntry } from "./types.ts";
 
 export interface HerdrTestJournal {
   readonly runs: ReadonlyArray<{ readonly paneId: string; readonly command: string; readonly args: ReadonlyArray<string> }>;
   readonly sendText: ReadonlyArray<{ readonly paneId: string; readonly text: string }>;
   readonly sendKeys: ReadonlyArray<{ readonly paneId: string; readonly keys: ReadonlyArray<string> }>;
   readonly removedWorkspaces: ReadonlyArray<string>;
+  /** Every `createSurface` call, capturing the routing parent (runtime workspace id). */
+  readonly surfaces: ReadonlyArray<{
+    readonly kind: SurfaceKind;
+    readonly label: string;
+    readonly workspaceId: string | undefined;
+  }>;
+  /** Labels passed to `findOrCreateWorkspace` that triggered a fresh workspace. */
+  readonly createdWorkspaces: ReadonlyArray<string>;
 }
 
 export interface HerdrTestApi {
   readonly script: (paneId: string, transcripts: ReadonlyArray<string>) => Effect.Effect<void>;
   readonly setWorktrees: (cwd: string, worktrees: ReadonlyArray<WorktreeEntry>) => Effect.Effect<void>;
+  /** Seed existing herdr workspaces so `findOrCreateWorkspace` finds them by label. */
+  readonly setWorkspaces: (workspaces: ReadonlyArray<WorkspaceEntry>) => Effect.Effect<void>;
   readonly journal: () => Effect.Effect<HerdrTestJournal>;
   /** Make the next (and subsequent) `worktree.remove` calls fail with this error; pass undefined to clear. */
   readonly failRemove: (error: HerdrError | undefined) => Effect.Effect<void>;
@@ -26,6 +36,8 @@ const emptyJournal = (): HerdrTestJournal => ({
   sendText: [],
   sendKeys: [],
   removedWorkspaces: [],
+  surfaces: [],
+  createdWorkspaces: [],
 });
 
 const buildHerdrTest = Effect.gen(function* () {
@@ -34,6 +46,8 @@ const buildHerdrTest = Effect.gen(function* () {
   const readQueues = yield* Ref.make(new Map<string, ReadonlyArray<string>>());
   const readIndex = yield* Ref.make(new Map<string, number>());
   const worktreesByCwd = yield* Ref.make(new Map<string, ReadonlyArray<WorktreeEntry>>());
+  const workspacesByLabel = yield* Ref.make(new Map<string, string>());
+  const nextWorkspaceId = yield* Ref.make(1);
   const journal = yield* Ref.make(emptyJournal());
   const removeFailure = yield* Ref.make<HerdrError | undefined>(undefined);
 
@@ -67,13 +81,31 @@ const buildHerdrTest = Effect.gen(function* () {
     setWorktrees: (cwd, worktrees) =>
       Ref.update(worktreesByCwd, (map) => new Map(map).set(cwd, worktrees)),
 
+    setWorkspaces: (workspaces) =>
+      Ref.update(workspacesByLabel, (map) => {
+        const next = new Map(map);
+        for (const ws of workspaces) {
+          if (ws.label != null) next.set(ws.label, ws.workspace_id);
+        }
+        return next;
+      }),
+
     journal: () => Ref.get(journal),
 
     failRemove: (error) => Ref.set(removeFailure, error),
   };
 
   const herdr: typeof Herdr.Service = {
-    createSurface: Effect.fn("herdr-test/create-surface")(function* (_kind: SurfaceKind, _dir: string, label: string) {
+    createSurface: Effect.fn("herdr-test/create-surface")(function* (
+      kind: SurfaceKind,
+      _dir: string,
+      label: string,
+      runtime?: HerdrRuntimeEnv,
+    ) {
+      yield* Ref.update(journal, (j) => ({
+        ...j,
+        surfaces: [...j.surfaces, { kind, label, workspaceId: runtime?.workspaceId }],
+      }));
       const labels = yield* Ref.get(labelToPane);
       const existing = labels.get(label);
       if (existing !== undefined) {
@@ -83,6 +115,19 @@ const buildHerdrTest = Effect.gen(function* () {
       const paneId = `pane-${id}`;
       yield* Ref.update(labelToPane, (map) => new Map(map).set(label, paneId));
       return paneId;
+    }),
+
+    findOrCreateWorkspace: Effect.fn("herdr-test/find-or-create-workspace")(function* (label: string) {
+      const existing = (yield* Ref.get(workspacesByLabel)).get(label);
+      if (existing !== undefined) return existing;
+      const n = yield* Ref.getAndUpdate(nextWorkspaceId, (x) => x + 1);
+      const id = `ws-${n}`;
+      yield* Ref.update(workspacesByLabel, (map) => new Map(map).set(label, id));
+      yield* Ref.update(journal, (j) => ({
+        ...j,
+        createdWorkspaces: [...j.createdWorkspaces, label],
+      }));
+      return id;
     }),
 
     pane: {

@@ -76,6 +76,9 @@ export const spawnAgent = Effect.fn("homestead/spawn-agent")(function* (input: S
   const { config, repo, slug, prompt, createdAt } = input;
   const agent = resolveAgentDefaults(input.agent);
   const seeded = seedSpawnPrompt(prompt, input.agent);
+  // Provenance is the single source of truth for "this is auto": it routes the
+  // herdr surface into `[dispatched]` and stamps the persisted marker.
+  const spawnedBy = input.spawnedBy ?? DEFAULT_SPAWNED_BY;
 
   const plan: Plan = yield* setupWorktree(config, { create: slug }, repo);
 
@@ -87,12 +90,10 @@ export const spawnAgent = Effect.fn("homestead/spawn-agent")(function* (input: S
     repoName: repo.repoName,
     agent,
     prompt: seeded,
+    spawnedBy,
   });
 
-  yield* writeAgentMarker(
-    plan.targetDir,
-    buildSpawnMarker({ spawnedBy: input.spawnedBy ?? DEFAULT_SPAWNED_BY, paneId, createdAt }),
-  );
+  yield* writeAgentMarker(plan.targetDir, buildSpawnMarker({ spawnedBy, paneId, createdAt }));
 
   return plan;
 });

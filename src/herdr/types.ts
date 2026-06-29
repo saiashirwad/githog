@@ -35,6 +35,34 @@ export const openWorkspaceIdForBranch = (
 ): string | undefined =>
   worktrees.find((wt) => wt.branch === branch)?.open_workspace_id ?? undefined;
 
+const WorkspaceEntrySchema = Schema.Struct({
+  workspace_id: Schema.String,
+  label: Schema.optional(Schema.NullOr(Schema.String)),
+});
+
+// `herdr workspace list` emits JSON on plain invocation (it rejects `--json`).
+export const WorkspaceListSchema = Schema.Struct({
+  result: Schema.Struct({
+    workspaces: Schema.Array(WorkspaceEntrySchema),
+  }),
+});
+
+export type WorkspaceEntry = Schema.Schema.Type<typeof WorkspaceEntrySchema>;
+
+// `herdr workspace create --label <l> --no-focus` (no `--json` flag) returns the
+// created workspace under `result.workspace`.
+export const WorkspaceCreatedSchema = Schema.Struct({
+  result: Schema.Struct({
+    workspace: Schema.Struct({ workspace_id: Schema.String }),
+  }),
+});
+
+export const workspaceIdForLabel = (
+  workspaces: ReadonlyArray<WorkspaceEntry>,
+  label: string,
+): string | undefined =>
+  workspaces.find((ws) => ws.label === label)?.workspace_id ?? undefined;
+
 export const matcher = (marker: string, regex: boolean | undefined) => {
   if (regex) {
     const re = new RegExp(marker);
