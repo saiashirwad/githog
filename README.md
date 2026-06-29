@@ -1,6 +1,6 @@
 # homestead
 
-Two worktrees of the same repo both want port 3000, and they're both reaching for the same database. homestead gives each one its own ports, its own `.env`, its own setup — opened in a [herdr](https://herdr.dev) pane.
+Two worktrees of the same repo both want port 3000 and the same database. homestead gives each one its own ports, its own `.env`, its own setup — opened in a [herdr](https://herdr.dev) pane.
 
 ```bash
 homestead worktree my-feature
@@ -16,16 +16,13 @@ homestead issue 21 22 23
 
 Three worktrees, three panes, a coding agent booted in each and handed its issue.
 
-Fanning out interdependent work in waves? Stack a later wave on an integration
-branch so it sees the earlier wave's code without merging to the default branch
-first:
+Stack a later wave on an integration branch so it sees earlier work without merging to the default branch first:
 
 ```bash
 homestead issue 24 25 --from integration
 ```
 
-`--from` overrides the default branch per-run; set `issues.base` in the config to
-make an integration base the persistent default.
+`--from` overrides the base per run; set `issues.base` in the config to make it the persistent default.
 
 Tear one down when you're done:
 
@@ -38,24 +35,11 @@ homestead kill 21         # discard it
 ## Land a finished branch
 
 ```bash
-homestead land 21              # merge 21 → default branch, regenerate, verify, keep only if green
+homestead land 21              # merge → regenerate → verify → keep only if green
 homestead land 21 --complete  # …and on green, run `homestead complete` for you
 ```
 
-Integrating a finished branch by hand is the same chore every time: stash your
-WIP, merge, regenerate generated files (a text merge of those is wrong — they
-must be rebuilt), run checks, and only commit if it's green. `land` owns that:
-
-1. Auto-stashes the primary checkout's dirty WIP, then `git merge --no-ff --no-commit`.
-2. Regenerates generated artifacts (default `bun run gen:config-types`). A merge
-   conflict confined to your generated files is resolved by regenerating them,
-   not by failing.
-3. Runs the verify gate (default `bun run check`).
-4. **Green** → commits the merge. **Red** → rolls the whole merge back. Either
-   way your stashed WIP comes back.
-
-Run it from the primary checkout while it's on the default branch. Configure the
-commands under `land` (see below). Pass several branches to land them in order.
+Integrating a finished branch by hand is the same chore every time: stash WIP, merge, rebuild generated files (a text merge of those is wrong), run checks, commit only if green. `land` owns it — and rolls the whole merge back on red, returning your stashed WIP either way. Run it from the primary checkout on the default branch; pass several branches to land them in order. Configure the regenerate and verify commands under `land`.
 
 ## See everything at once
 
@@ -63,8 +47,7 @@ commands under `land` (see below). Pass several branches to land them in order.
 homestead ls
 ```
 
-A read-only dashboard — one row per worktree, joining git, each `.env`, tracking
-state, and herdr:
+A read-only dashboard — one row per worktree, joining git, each `.env`, tracking state, and herdr:
 
 ```
 SLUG         BRANCH       PORTS              DB              AGENT     PANE   ORIGIN
@@ -72,9 +55,7 @@ auth-rework  auth-rework  WEB=3001 API=4001  hs_authrework   running   ws-7   yo
 issue-142    142          WEB=3002 API=4002  hs_142          done      —      [auto]
 ```
 
-Every column degrades to `—` on its own if a source is missing — it never
-mutates anything. The DB column reads the keys you list in `env.derivedKeys`
-straight from each worktree's `.env` (it never re-runs `env.derive`).
+Every column degrades to `—` on its own if a source is missing; it never mutates anything.
 
 ## Someone else's PR
 
@@ -92,7 +73,7 @@ bun add -g homestead
 homestead init
 ```
 
-`init` leaves you a `homestead.config.ts` — ports, env, setup steps. Fully typed, nothing installed:
+`init` leaves you a fully typed `homestead.config.ts` — ports, env, setup steps, agent:
 
 ```ts
 import type { HomesteadConfig } from "./generated/homestead.config.types";
@@ -108,29 +89,11 @@ export default {
 } satisfies HomesteadConfig;
 ```
 
-### Greet each issue differently
-
-`agent.prompt` runs per issue, so you can change the kickoff by what the issue looks like:
-
-```ts
-agent: {
-  command: ["claude"],
-  surface: "worktree",
-  prompt: ({ item }) =>
-    item.title.startsWith("bug:")
-      ? `Reproduce and fix #${item.number}: ${item.title}`
-      : `Implement #${item.number}: ${item.title}`,
-},
-```
-
-It goes further than this — shared services, lifecycle hooks, more agent options. The [example config](./homestead.config.example.ts) covers the rest.
+It goes further — per-issue agent prompts, shared services, lifecycle hooks. The [example config](./homestead.config.example.ts) covers the rest.
 
 ## Driving homestead from an agent
 
-Any coding agent — Claude or otherwise — can drive worktree orchestration through a
-small, stable contract: the status sentinel, the `agent wait` exit codes, and the
-provenance markers that keep auto-work from being silently landed. See
-[docs/ORCHESTRATION.md](./docs/ORCHESTRATION.md).
+Any coding agent can drive worktree orchestration through a small, stable contract — the status sentinel, `agent wait` exit codes, and provenance markers. See [docs/ORCHESTRATION.md](./docs/ORCHESTRATION.md).
 
 ## Requirements
 
