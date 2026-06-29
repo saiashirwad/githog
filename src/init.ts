@@ -78,6 +78,34 @@ const installSkills = Effect.fn("homestead/init/skills")(function* (primaryRoot:
   return installed;
 });
 
+// Ensure `.homestead/` is gitignored. Each worktree writes runtime state there
+// (the provisioning marker, the agent-status sentinel) that must never be
+// committed — same treatment `.env` already gets. Idempotent: appends the entry
+// only when absent, and creates `.gitignore` if the repo has none.
+const ensureHomesteadGitignored = Effect.fn("homestead/init/gitignore")(function* (primaryRoot: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const ENTRY = ".homestead/";
+  const gitignorePath = path.join(primaryRoot, ".gitignore");
+
+  const exists = yield* fs.exists(gitignorePath).pipe(Effect.orDie);
+  const current = exists ? yield* fs.readFileString(gitignorePath).pipe(Effect.orDie) : "";
+
+  const alreadyIgnored = current
+    .split("\n")
+    .map((line) => line.trim())
+    .some((line) => line === ENTRY || line === ".homestead");
+  if (alreadyIgnored) {
+    yield* Console.log(`  • ${ENTRY} already gitignored — leaving it`);
+    return;
+  }
+
+  const prefix = current === "" || current.endsWith("\n") ? current : `${current}\n`;
+  const block = `${prefix}\n# homestead worktree-local runtime state (marker, agent sentinel)\n${ENTRY}\n`;
+  yield* fs.writeFileString(gitignorePath, block).pipe(Effect.orDie);
+  yield* Console.log(`  ✓ added ${ENTRY} to .gitignore`);
+});
+
 export const initRepo = Effect.fn("homestead/init")(function* (primaryRoot: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -104,6 +132,8 @@ export const initRepo = Effect.fn("homestead/init")(function* (primaryRoot: stri
     yield* fs.writeFileString(typesPath, types).pipe(Effect.orDie);
     yield* Console.log(`  ✓ wrote ${CONFIG_TYPES_RELPATH.join("/")}`);
   }
+
+  yield* ensureHomesteadGitignored(primaryRoot);
 
   yield* installSkills(primaryRoot);
 

@@ -21,6 +21,7 @@ import { launchPr } from "./pr/provision.ts";
 import { closeBranch, completeBranch, killBranch } from "./teardown.ts";
 import { collectDashboard, renderTable } from "./dashboard.ts";
 import { runGc } from "./gc.ts";
+import { runDoctor } from "./doctor.ts";
 import {
   exitCodeFor,
   parseCompactDuration,
@@ -471,6 +472,23 @@ const gcCommand = Command.make(
   Command.withDescription("reconcile + reclaim orphaned worktrees, state, GitHub signals, and branches"),
 );
 
+const doctorCommand = Command.make(
+  "doctor",
+  {
+    fix: Flag.boolean("fix").pipe(
+      Flag.withDescription("re-run setup on half-provisioned worktrees (default: report only)"),
+    ),
+  },
+  ({ fix }) =>
+    Effect.gen(function* () {
+      const repo = yield* resolveRepo();
+      const config = yield* loadConfig(repo.primaryRoot);
+      yield* runDoctor(repo, config, { fix });
+    }),
+).pipe(
+  Command.withDescription("audit every worktree for half-provisioning, port conflicts, and stale state"),
+);
+
 const agentCommand = Command.make("agent", {}).pipe(
   Command.withDescription("agent lifecycle commands"),
   Command.withSubcommands([agentSpawnCommand, agentPromptCommand, agentResultCommand, agentWaitCommand]),
@@ -490,6 +508,7 @@ const homestead = Command.make("homestead", {}).pipe(
     agentCommand,
     lsCommand,
     gcCommand,
+    doctorCommand,
   ]),
 );
 
