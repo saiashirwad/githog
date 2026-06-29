@@ -1,6 +1,5 @@
 import { Effect } from "effect";
-import { run } from "../process.ts";
-import { refExists } from "../worktree/base-ref.ts";
+import { Git } from "../git/service.ts";
 import type { PrView } from "./resolve.ts";
 
 export type PrCheckout =
@@ -25,21 +24,16 @@ export const ensureLocalBranch = Effect.fn("homestead/ensure-pr-branch")(functio
   pr: PrView,
   checkout: PrCheckout,
 ) {
+  const git = yield* Git;
+
   if (checkout.kind === "fork") {
-    yield* run(
-      "git fetch (pr head)",
-      "git",
-      ["fetch", "origin", `+pull/${pr.number}/head:${checkout.branch}`],
-      { cwd: primaryRoot },
-    );
+    yield* git.fetch(primaryRoot, "origin", `+pull/${pr.number}/head:${checkout.branch}`);
     return;
   }
 
-  yield* run("git fetch", "git", ["fetch", "origin", pr.headRefName], { cwd: primaryRoot });
-  const exists = yield* refExists(primaryRoot, `refs/heads/${checkout.branch}`);
+  yield* git.fetch(primaryRoot, "origin", pr.headRefName);
+  const exists = yield* git.refExists(primaryRoot, `refs/heads/${checkout.branch}`);
   if (!exists) {
-    yield* run("git branch", "git", ["branch", checkout.branch, `origin/${pr.headRefName}`], {
-      cwd: primaryRoot,
-    });
+    yield* git.branch.create(primaryRoot, checkout.branch, `origin/${pr.headRefName}`);
   }
 });

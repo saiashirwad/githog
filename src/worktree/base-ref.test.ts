@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
 import { GitTest, GitTestHandle } from "../git/test.ts";
-import { branchFromOriginHead, refExists, resolveDefaultBaseRef } from "./base-ref.ts";
+import { branchFromOriginHead, resolveDefaultBaseRef } from "./base-ref.ts";
 
 test("branchFromOriginHead strips origin/ prefix", () => {
   expect(branchFromOriginHead("origin/main")).toBe("main");
@@ -33,15 +33,4 @@ test("resolveDefaultBaseRef: falls back to main when origin/HEAD absent", async 
     }).pipe(Effect.provide(GitTest)),
   );
   expect(branch).toBe("main");
-});
-
-test("refExists delegates to the Git service", async () => {
-  const result = await Effect.runPromise(
-    Effect.gen(function* () {
-      const handle = yield* GitTestHandle;
-      yield* handle.setRefExists("/repo", "refs/heads/feature", true);
-      return yield* refExists("/repo", "refs/heads/feature");
-    }).pipe(Effect.provide(GitTest)),
-  );
-  expect(result).toBe(true);
 });
