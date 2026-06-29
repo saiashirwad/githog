@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { BunServices } from "@effect/platform-bun";
 import { Effect, FileSystem, Layer, Path } from "effect";
-import type { ChildProcessSpawner } from "effect/unstable/process";
 import * as fsSync from "node:fs";
 import * as os from "node:os";
 import { resolve } from "node:path";
@@ -13,6 +12,7 @@ import {
   scanDoctor,
   type DoctorReport,
 } from "./doctor.ts";
+import { Git, GitLive } from "./git/service.ts";
 import { computePortEdits } from "./worktree/plan.ts";
 import { PROVISION_MARKER_RELPATH } from "./worktree/marker.ts";
 import { makeContext } from "./context.ts";
@@ -183,14 +183,12 @@ afterEach(() => {
   fsSync.rmSync(stateDirFor(repoName), { recursive: true, force: true });
 });
 
-const porcelain = (entries: ReadonlyArray<{ path: string; branch?: string }>): string =>
-  entries
-    .map((e) => `worktree ${e.path}\n${e.branch !== undefined ? `branch refs/heads/${e.branch}\n` : ""}`)
-    .join("\n");
-
 const run = <A>(
-  effect: Effect.Effect<A, unknown, FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner>,
-): Promise<A> => Effect.runPromise(effect.pipe(Effect.provide(BunServices.layer)));
+  effect: Effect.Effect<A, unknown, FileSystem.FileSystem | Path.Path | Git>,
+): Promise<A> =>
+  Effect.runPromise(
+    effect.pipe(Effect.provide(Layer.provideMerge(Layer.mergeAll(GitLive), BunServices.layer))),
+  );
 
 const PORT_CONFIG: HomesteadConfig = { ports: [{ key: "WEB_PORT", base: 5300 }] };
 
@@ -203,7 +201,7 @@ test("scanDoctor: .env present, owned port missing, no marker ⇒ FAIL + a repai
     scanDoctor(
       REPO,
       PORT_CONFIG,
-      Effect.succeed(porcelain([{ path: REPO.primaryRoot, branch: "main" }, { path: wtPath, branch: "feat" }])),
+      Effect.succeed([{ path: REPO.primaryRoot, branch: "main" }, { path: wtPath, branch: "feat" }]),
     ),
   );
 
@@ -226,7 +224,7 @@ test("scanDoctor: a provision marker flips the same worktree to PASS, no repair"
     scanDoctor(
       REPO,
       PORT_CONFIG,
-      Effect.succeed(porcelain([{ path: REPO.primaryRoot, branch: "main" }, { path: wtPath, branch: "feat" }])),
+      Effect.succeed([{ path: REPO.primaryRoot, branch: "main" }, { path: wtPath, branch: "feat" }]),
     ),
   );
 
@@ -238,7 +236,7 @@ test("scanDoctor: a provision marker flips the same worktree to PASS, no repair"
 
 test("scanDoctor: the primary checkout is never audited", async () => {
   const scan = await run(
-    scanDoctor(REPO, PORT_CONFIG, Effect.succeed(porcelain([{ path: REPO.primaryRoot, branch: "main" }]))),
+    scanDoctor(REPO, PORT_CONFIG, Effect.succeed([{ path: REPO.primaryRoot, branch: "main" }])),
   );
   expect(scan.report.worktrees).toEqual([]);
 });
