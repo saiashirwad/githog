@@ -14,7 +14,8 @@ import {
 import { explainTimeout } from "./herdr/errors.ts";
 import { Herdr } from "./herdr/service.ts";
 import { initRepo } from "./init.ts";
-import { parseIssueArg } from "./issues.ts";
+import { parseIssueArg, validateIssueRefs } from "./issues.ts";
+import { runPlan } from "./waves-cmd.ts";
 import { launchIssues, requireAgentConfig } from "./issue/provision.ts";
 import { parsePrArg, type PrRef } from "./pr/ref.ts";
 import { launchPr } from "./pr/provision.ts";
@@ -152,6 +153,33 @@ const issueCommand = Command.make(
       );
     }),
 ).pipe(Command.withDescription("issue = number or GitHub issue URL; one worktree + agent each"));
+
+const planCommand = Command.make(
+  "plan",
+  {
+    refs: issueRef.pipe(
+      Argument.atLeast(1),
+      Argument.withDescription("issue number or GitHub issue URL"),
+    ),
+    json: Flag.boolean("json").pipe(Flag.withDescription("emit the machine-readable schedule")),
+  },
+  ({ refs, json }) =>
+    Effect.gen(function* () {
+      yield* validateIssueRefs(refs).pipe(
+        Effect.catchTag("IssueRepoMismatch", (e) =>
+          fail(
+            `[homestead] issue URL points at ${e.owner}/${e.repo}, but you're in ${e.here}. ` +
+              `Run homestead from inside ${e.owner}/${e.repo}, or pass the bare issue number.`,
+          ),
+        ),
+      );
+      // planWaves rejects unresolvable depends-on titles and dependency cycles;
+      // print the offender and exit non-zero (fail → clean line + exit 1).
+      yield* runPlan(refs, json).pipe(Effect.catchTag("WavePlanError", (e) => fail(e.message)));
+    }),
+).pipe(
+  Command.withDescription("emit collision-aware build waves + a serial integrate order for an issue set"),
+);
 
 const killCommand = Command.make(
   "kill",
@@ -627,6 +655,7 @@ const homestead = Command.make("homestead", {}).pipe(
     initCommand,
     worktreeCommand,
     issueCommand,
+    planCommand,
     killCommand,
     closeCommand,
     completeCommand,
