@@ -1,5 +1,5 @@
 import { Effect, Path } from "effect";
-import { capture } from "../process.ts";
+import { Git } from "../git/service.ts";
 
 export interface Repo {
   readonly startCwd: string;
@@ -11,8 +11,9 @@ export interface Repo {
 // homestead config live). git-common-dir is "<primary>/.git" for every worktree.
 export const resolveRepo = Effect.fn("homestead/resolve-repo")(function* () {
   const path = yield* Path.Path;
+  const git = yield* Git;
   const startCwd = process.cwd();
-  const gitCommonDirRaw = yield* capture("git", ["rev-parse", "--git-common-dir"], startCwd);
+  const gitCommonDirRaw = yield* git.commonDir(startCwd);
   const gitCommonDir = path.isAbsolute(gitCommonDirRaw)
     ? gitCommonDirRaw
     : path.resolve(startCwd, gitCommonDirRaw);

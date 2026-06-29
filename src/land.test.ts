@@ -3,6 +3,7 @@ import { BunServices } from "@effect/platform-bun";
 import { Effect, Layer } from "effect";
 import { TestConsole } from "effect/testing";
 import { HerdrTest } from "./herdr/test.ts";
+import { GitLive } from "./git/service.ts";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import * as os from "node:os";
@@ -101,9 +102,12 @@ const settings = (over: Partial<LandSettings> = {}): LandSettings => ({
   ...over,
 });
 
-// Real git + filesystem (BunServices), a stub Herdr (only reached via --complete,
-// which these tests don't exercise), and a captured Console to keep output quiet.
-const TestLayer = Layer.mergeAll(BunServices.layer, HerdrTest, TestConsole.layer);
+// Real git + filesystem (BunServices) with a real Git service over them, a stub
+// Herdr (only reached via --complete), and a captured Console to keep output quiet.
+const TestLayer = Layer.provideMerge(
+  Layer.mergeAll(GitLive, HerdrTest, TestConsole.layer),
+  BunServices.layer,
+);
 const run = <A>(eff: Effect.Effect<A, unknown, any>): Promise<A> =>
   Effect.runPromise(Effect.provide(eff, TestLayer) as Effect.Effect<A>);
 

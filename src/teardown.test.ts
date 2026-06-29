@@ -12,6 +12,7 @@ import { runAfterTeardown, runBeforeTeardown } from "./hooks.ts";
 import { makeContext } from "./context.ts";
 import { HerdrError } from "./herdr/errors.ts";
 import { HerdrTest, HerdrTestHandle } from "./herdr/test.ts";
+import { GitLive } from "./git/service.ts";
 import { removeHerdrWorktree, completeBranch } from "./teardown.ts";
 import { markCompleted, markFinished, markStopped } from "./tracking.ts";
 import { slugify } from "./text.ts";
@@ -99,7 +100,7 @@ test("markFinished on spawn state deletes the file and issues no gh calls", asyn
 test("completeBranch refuses spawn work without --allow-spawned (no side effects)", async () => {
   await withHomestead("r", "spawn-x", spawnStateJson, async ({ primaryRoot, stateFile }) => {
     const calls: Array<Array<string>> = [];
-    const layer = Layer.provideMerge(HerdrTest, baseLayer(calls));
+    const layer = Layer.provideMerge(Layer.mergeAll(GitLive, HerdrTest), baseLayer(calls));
     await Effect.runPromise(
       completeBranch(primaryRoot, "r", "spawn-x", false, undefined, false).pipe(Effect.provide(layer)),
     );
@@ -112,7 +113,7 @@ test("completeBranch refuses spawn work without --allow-spawned (no side effects
 test("completeBranch proceeds on spawn work with --allow-spawned", async () => {
   await withHomestead("r", "spawn-x", spawnStateJson, async ({ primaryRoot, stateFile }) => {
     const calls: Array<Array<string>> = [];
-    const layer = Layer.provideMerge(HerdrTest, baseLayer(calls));
+    const layer = Layer.provideMerge(Layer.mergeAll(GitLive, HerdrTest), baseLayer(calls));
     await Effect.runPromise(
       completeBranch(primaryRoot, "r", "spawn-x", false, undefined, true).pipe(Effect.provide(layer)),
     );
@@ -177,7 +178,7 @@ test("teardownWorktree kills the branch's dev servers BEFORE git worktree remova
     } as unknown as ChildProcessSpawner.ChildProcessSpawner["Service"]);
 
     const layer = Layer.provideMerge(
-      HerdrTest,
+      Layer.mergeAll(GitLive, HerdrTest),
       Layer.mergeAll(BunFileSystem.layer, BunPath.layer, orderingSpawner),
     );
     await Effect.runPromise(

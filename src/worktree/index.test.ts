@@ -6,6 +6,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { HerdrTest } from "../herdr/test.ts";
+import { GitLive } from "../git/service.ts";
 import { readEnvVar, slugify } from "../text.ts";
 import type { HomesteadConfig } from "../types.ts";
 import { setupWorktree, type Repo } from "./index.ts";
@@ -17,7 +18,7 @@ import { PortAllocator } from "./ports.ts";
 // the reservations registry/lockfile (Layer 2) + writeEnv — against a real git
 // repo, which is exactly the race `launchIssues({ concurrency })` would hit.
 
-const Layers = Layer.provideMerge(Layer.mergeAll(HerdrTest, PortAllocator.layer), BunServices.layer);
+const Layers = Layer.provideMerge(Layer.mergeAll(GitLive, HerdrTest, PortAllocator.layer), BunServices.layer);
 
 let home: string;
 let repoRoot: string;
