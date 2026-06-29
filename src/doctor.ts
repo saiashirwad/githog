@@ -198,7 +198,9 @@ export const scanDoctor = Effect.fn("homestead/scan-doctor")(function* (
   const path = yield* Path.Path;
   const git = yield* Git;
 
-  const gitWorktrees = yield* gitWorktreeList;
+  const gitWorktrees = yield* gitWorktreeList.pipe(
+    Effect.catchDefect(() => Effect.succeed([] as ReadonlyArray<WorktreePorcelainEntry>)),
+  );
   const primary = key(repo.primaryRoot);
   const worktrees = gitWorktrees.filter((e) => key(e.path) !== primary);
 

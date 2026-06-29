@@ -83,7 +83,7 @@ const readEnvCells = (
 // are the spine (the primary checkout is excluded); .env, tracking state, herdr,
 // the agent sentinel, and the provenance marker each left-join and degrade
 // independently. Orphaned tracking-state files are appended as `(stale state)`
-// rows. STRICTLY READ-ONLY: only `capture`, FileSystem reads, the tracking
+// rows. STRICTLY READ-ONLY: only `git.worktree.list`, FileSystem reads, the tracking
 // loaders, and herdr's read surface (`worktree.list`) are touched.
 export const collectDashboard = Effect.fn("homestead/collect-dashboard")(function* (
   repo: Repo,

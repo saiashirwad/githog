@@ -13,7 +13,8 @@ import { makeContext } from "./context.ts";
 import { HerdrError } from "./herdr/errors.ts";
 import { HerdrTest, HerdrTestHandle } from "./herdr/test.ts";
 import { GitLive } from "./git/service.ts";
-import { removeHerdrWorktree, completeBranch } from "./teardown.ts";
+import { deleteLocalBranch, removeHerdrWorktree, completeBranch } from "./teardown.ts";
+import { GitTest, GitTestHandle } from "./git/test.ts";
 import { markCompleted, markFinished, markStopped } from "./tracking.ts";
 import { slugify } from "./text.ts";
 
@@ -281,4 +282,25 @@ test("emit delivers teardown events to custom onEvent", async () => {
     { type: "teardown", verb: "kill", branch: "b", phase: "start" },
     { type: "teardown", verb: "kill", branch: "b", phase: "done" },
   ]);
+});
+
+test("deleteLocalBranch: branch.delete failure logs ⚠ warning and resolves (warn-and-continue)", async () => {
+  const root = "/repo/primary";
+  const branch = "feat/x";
+
+  const program = Effect.gen(function* () {
+    const handle = yield* GitTestHandle;
+    yield* handle.setRefExists(root, `refs/heads/${branch}`, true);
+    yield* handle.setBranchDeleteResult(root, branch, false);
+    yield* deleteLocalBranch(root, branch);
+    return yield* TestConsole.logLines;
+  });
+
+  const lines = await Effect.runPromise(
+    program.pipe(
+      Effect.provide(Layer.mergeAll(GitTest, BunServices.layer, TestConsole.layer)),
+    ),
+  );
+  const text = lines.map((l) => (Array.isArray(l) ? l.join(" ") : String(l))).join("\n");
+  expect(text).toContain(`⚠ git branch -D ${branch} failed`);
 });

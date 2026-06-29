@@ -15,6 +15,7 @@ export interface GitTestApi {
   readonly setStatusV2: (cwd: string, raw: string) => Effect.Effect<void>;
   readonly setShortHead: (cwd: string, sha: string) => Effect.Effect<void>;
   readonly setTopLevel: (cwd: string, path: string) => Effect.Effect<void>;
+  readonly setBranchDeleteResult: (cwd: string, name: string, ok: boolean) => Effect.Effect<void>;
   readonly journal: () => Effect.Effect<{
     merges: Array<{ cwd: string; branch: string }>;
     aborts: Array<string>;
@@ -39,6 +40,7 @@ const key = (cwd: string, x: string) => `${cwd} ${x}`;
 
 const buildGitTest = Effect.gen(function* () {
   const commonDirs = yield* Ref.make(new Map<string, string>());
+  const branchDeleteResults = yield* Ref.make(new Map<string, boolean>());
   const symbolicRefs = yield* Ref.make(new Map<string, string>());
   const refExistsMap = yield* Ref.make(new Map<string, boolean>());
   const mergeResults = yield* Ref.make(new Map<string, MergeResult>());
@@ -95,6 +97,8 @@ const buildGitTest = Effect.gen(function* () {
       Ref.update(shortHeads, (m) => new Map(m).set(cwd, sha)),
     setTopLevel: (cwd, path) =>
       Ref.update(topLevels, (m) => new Map(m).set(cwd, path)),
+    setBranchDeleteResult: (cwd, name, ok) =>
+      Ref.update(branchDeleteResults, (m) => new Map(m).set(key(cwd, name), ok)),
     journal: () => Ref.get(journal),
   };
 
@@ -153,10 +157,10 @@ const buildGitTest = Effect.gen(function* () {
           branchCreates: [...j.branchCreates, { cwd, name, startPoint }],
         })),
       delete: (cwd, name) =>
-        Ref.update(journal, (j) => ({
-          ...j,
-          branchDeletes: [...j.branchDeletes, { cwd, name }],
-        })).pipe(Effect.as(true)),
+        Effect.gen(function* () {
+          yield* Ref.update(journal, (j) => ({ ...j, branchDeletes: [...j.branchDeletes, { cwd, name }] }));
+          return (yield* Ref.get(branchDeleteResults)).get(key(cwd, name)) ?? true;
+        }),
       deleteRemote: (cwd, remote, name) =>
         Ref.update(journal, (j) => ({
           ...j,

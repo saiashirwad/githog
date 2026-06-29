@@ -298,7 +298,7 @@ const statusOf = (dir: string) =>
 
 // ---------------------------------------------------------------------------
 // Scan — read-only. Gathers every disk/git/herdr fact classifyGc needs and
-// returns the plan. Touches only `capture`, FileSystem reads, the tracking
+// returns the plan. Touches only the `Git` service, FileSystem reads, the tracking
 // loaders, and herdr's read surface (`worktree.list`) — never a mutation.
 // ---------------------------------------------------------------------------
 export const scanGc = Effect.fn("homestead/scan-gc")(function* (

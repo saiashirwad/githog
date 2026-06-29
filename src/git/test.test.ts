@@ -57,3 +57,20 @@ test("GitTest worktree.list/pathForBranch + remove journal", async () => {
     }).pipe(Effect.provide(GitTest)),
   );
 });
+
+test("GitTest setBranchDeleteResult stages false for branch.delete (still journals)", async () => {
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const handle = yield* GitTestHandle;
+      const git = yield* Git;
+      yield* handle.setBranchDeleteResult("/repo", "feat", false);
+
+      const ok = yield* git.branch.delete("/repo", "feat");
+      expect(ok).toBe(false);
+
+      // The journal entry is still recorded even when the result is false.
+      const journal = yield* handle.journal();
+      expect(journal.branchDeletes).toEqual([{ cwd: "/repo", name: "feat" }]);
+    }).pipe(Effect.provide(GitTest)),
+  );
+});

@@ -240,3 +240,13 @@ test("scanDoctor: the primary checkout is never audited", async () => {
   );
   expect(scan.report.worktrees).toEqual([]);
 });
+
+test("scanDoctor: a dying gitWorktreeList degrades to empty audit (no crash)", async () => {
+  // The fail-safe: a defect in the worktree-list read must NOT crash the diagnostic.
+  // doctor degrades to an empty worktree list and returns normally with no repairs.
+  const scan = await run(
+    scanDoctor(REPO, PORT_CONFIG, Effect.die(new Error("git worktree list boom"))),
+  );
+  expect(scan.report.worktrees).toEqual([]);
+  expect(scan.repairs).toEqual([]);
+});
